@@ -4,7 +4,7 @@ thispath=$(realpath .)
 
 mkdir esp
 cd esp
-git clone --depth 1 --branch v5.1.4 --recursive https://github.com/espressif/esp-idf.git 
+git clone --depth 1 --branch v5.1.6 --recursive https://github.com/espressif/esp-idf.git 
 
 mkdir watchy
 cd watchy
