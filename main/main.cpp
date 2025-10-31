@@ -37,8 +37,8 @@ void initDisplay(void* pvParameters) {
     /* Init the display. */
     display.epd2.initWatchy();
     display.setFullWindow();
-    display.fillScreen(GxEPD_WHITE);
-    display.setTextColor(GxEPD_BLACK);
+    display.fillScreen(GxEPD_BLACK);
+    display.setTextColor(GxEPD_WHITE);
     display.setFont(&FreeMonoBold9pt7b);
     display.setCursor(0, 90);
     display.print("Johannes Bingel!\nFabius Mettner!");
@@ -51,37 +51,38 @@ void initDisplay(void* pvParameters) {
 
 void buttonWatch(void* pvParameters) {
     unsigned int refresh = 0;
-    for (;;) {
+    
+    while (true) {
         if (digitalRead(BOTTOM_LEFT) == HIGH) {
             ESP_LOGI("buttonWatch", "Bottom Left pressed!");
-            display.fillRoundRect(0, 150, 50, 50, 20, GxEPD_BLACK);
+            display.fillRoundRect(0, 150, 50, 50, 20, GxEPD_WHITE);
             display.display(true);
             vTaskDelay(500);
-            display.fillRoundRect(0, 150, 50, 50, 20, GxEPD_WHITE);
+            display.fillRoundRect(0, 150, 50, 50, 20, GxEPD_BLACK);
             display.display(true);
             refresh++;
         } else if (digitalRead(BOTTOM_RIGHT) == HIGH) {
             ESP_LOGI("buttonWatch", "Bottom Right pressed!");
-            display.fillRoundRect(150, 150, 50, 50, 20, GxEPD_BLACK);
+            display.fillRoundRect(150, 150, 50, 50, 20, GxEPD_WHITE);
             display.display(true);
             vTaskDelay(500);
-            display.fillRoundRect(150, 150, 50, 50, 20, GxEPD_WHITE);
+            display.fillRoundRect(150, 150, 50, 50, 20, GxEPD_BLACK);
             display.display(true);
             refresh++;
         } else if (digitalRead(TOP_LEFT) == HIGH) {
             ESP_LOGI("buttonWatch", "Top Left pressed!");
-            display.fillRoundRect(0, 0, 50, 50, 20, GxEPD_BLACK);
+            display.fillRoundRect(0, 0, 50, 50, 20, GxEPD_WHITE);
             display.display(true);
             vTaskDelay(500);
-            display.fillRoundRect(0, 0, 50, 50, 20, GxEPD_WHITE);
+            display.fillRoundRect(0, 0, 50, 50, 20, GxEPD_BLACK);
             display.display(true);
             refresh++;
         } else if (digitalRead(TOP_RIGHT) == HIGH) {
             ESP_LOGI("buttonWatch", "Top Right pressed!");
-            display.fillRoundRect(150, 0, 50, 50, 20, GxEPD_BLACK);
+            display.fillRoundRect(150, 0, 50, 50, 20, GxEPD_WHITE);
             display.display(true);
             vTaskDelay(500);
-            display.fillRoundRect(150, 0, 50, 50, 20, GxEPD_WHITE);
+            display.fillRoundRect(150, 0, 50, 50, 20, GxEPD_BLACK);
             display.display(true);
             refresh++;
         } else if (refresh >= 10) {
@@ -92,11 +93,41 @@ void buttonWatch(void* pvParameters) {
     }
 }
 
+void clockCounter(void* pvParameters) {
+    const TickType_t xFrequency = 1000;
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    BaseType_t xCounterJojo = 0;
+    BaseType_t xCounterFabi = 0;
+
+    while (true) {
+        display.setTextColor(GxEPD_WHITE);
+        display.fillRoundRect(0, 0, 50, 50, 0, GxEPD_BLACK);
+        display.setCursor(0, 50);
+        display.print(xCounterJojo);
+        xCounterJojo++;
+        
+        
+        ESP_LOGI("counter fabius", "Counter increased!");
+        display.setTextColor(GxEPD_WHITE);
+        display.fillRoundRect(100, 140, 100, 10, 0, GxEPD_BLACK);
+        display.setFont(&FreeMonoBold9pt7b);
+        display.setCursor(100, 150);
+        display.printf("%2u", xCounterFabi);
+        
+        xCounterFabi += 1;
+        
+        display.display(true);
+
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    }
+}
+
 extern "C" void app_main() {
     /* Only priorities from 1-25 (configMAX_PRIORITIES) possible. */
     /* Initialize the display first. */
     xTaskCreate(initDisplay, "initDisplay", 4096, NULL, configMAX_PRIORITIES-1, NULL);
     xTaskCreate(buttonWatch, "watch", 8192, NULL, 1, NULL);
+    xTaskCreate(clockCounter, "clock", 16384, NULL, 1, NULL);
 
     ESP_LOGI("app_main", "Starting scheduler from app_main()");
     vTaskStartScheduler();
