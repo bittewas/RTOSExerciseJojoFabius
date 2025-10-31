@@ -39,9 +39,9 @@ void initDisplay(void* pvParameters) {
     display.setFullWindow();
     display.fillScreen(GxEPD_WHITE);
     display.setTextColor(GxEPD_BLACK);
-    display.setFont(&FreeMonoBold24pt7b);
+    display.setFont(&FreeMonoBold9pt7b);
     display.setCursor(0, 90);
-    display.print("Hello\nWorld!");
+    display.print("Johannes Bingel!\nFabius Mettner!");
     display.display(false);
 
     /* Delete the display initialization task. */
