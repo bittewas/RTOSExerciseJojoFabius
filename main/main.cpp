@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstring>
 #include <esp_log.h>
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <stdio.h>
@@ -22,6 +23,15 @@
 #define DISPLAY_DC 10
 #define DISPLAY_BUSY 19
 
+struct QueueTraceData {
+  TickType_t c_time;
+  QueueHandle_t xQueue;
+  TickType_t xTicksToWait;
+  TaskHandle_t taskIdentifier;
+};
+
+volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
+volatile struct TraceData GLOBAL_QUEUE_MESSAGE_BUFFER[1000];
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> display(WatchyDisplay{});
 QueueHandle_t xQueueHandle;
 
