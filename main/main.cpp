@@ -25,13 +25,18 @@
 
 struct QueueTraceData {
   TickType_t c_time;
+  TickType_t timeStamp;
   QueueHandle_t xQueue;
   TickType_t xTicksToWait;
   TaskHandle_t taskIdentifier;
 };
 
 volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
-volatile struct TraceData GLOBAL_QUEUE_MESSAGE_BUFFER[1000];
+volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE =
+    sizeof(QueueTraceData);
+volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER =
+    (char *)malloc(1000 * sizeof(QueueTraceData));
+
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> display(WatchyDisplay{});
 QueueHandle_t xQueueHandle;
 
@@ -179,6 +184,23 @@ void printingTask(void *pvParameters) {
   }
 }
 
+void debugPrintTask(void *pvParameters) {
+  const char *PRINTER_TAG = "QUEUE_DEBUG";
+  unsigned int uiMessageIndex = 0;
+  vTaskDelay(1000);
+  while (uiMessageIndex < GLOBAL_QUEUE_MESSAGE_INDEX) {
+    QueueTraceData *currentMessage =
+        (QueueTraceData *)(GLOBAL_QUEUE_MESSAGE_BUFFER +
+                           uiMessageIndex * GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);
+    ESP_LOGI(PRINTER_TAG, "%d;%d;%d;%d;%d", currentMessage->xQueue,
+             currentMessage->c_time, currentMessage->timeStamp,
+             currentMessage->taskIdentifier, currentMessage->xTicksToWait);
+    uiMessageIndex++;
+  }
+  while (true) {
+  }
+}
+
 extern "C" void app_main() {
   xQueueHandle = xQueueCreate(10, sizeof(void *));
   if (xQueueHandle == nullptr) {
@@ -213,6 +235,8 @@ extern "C" void app_main() {
   xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer3Params, 1,
               NULL);
   xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, NULL);
+  xTaskCreate(debugPrintTask, "debugTask", 4096, NULL, configMAX_PRIORITIES - 1,
+              NULL);
   // xTaskCreate(buttonWatch, "watch", 8192, NULL, 1, NULL);
   // xTaskCreate(clockCounter, "clock", 16384, NULL, 1, NULL);
 

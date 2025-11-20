@@ -330,22 +330,32 @@
 
 #define traceQUEUE_SEND(xQueue)                                                \
   {                                                                            \
-    extern struct QueueTraceData {                                             \
+    typedef struct QueueTraceData {                                            \
       TickType_t c_time;                                                       \
+      TickType_t timeStamp;                                                    \
       QueueHandle_t xQueue;                                                    \
       TickType_t xTicksToWait;                                                 \
       TaskHandle_t taskIdentifier;                                             \
-    };                                                                         \
+    } QueueTraceData_Fix;                                                      \
+                                                                               \
     extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile struct TraceData GLOBAL_QUEUE_MESSAGE_BUFFER[1000];        \
-    GLOBAL_QUEUE_MESSAGE_BUFFER[GLOBAL_QUEUE_MESSAGE_INDEX].c_time =           \
-        xTaskGetTickCountFromISR();                                            \
-    GLOBAL_QUEUE_MESSAGE_BUFFER[GLOBAL_QUEUE_MESSAGE_INDEX].xQueue = xQueue;   \
-    GLOBAL_QUEUE_MESSAGE_BUFFER[GLOBAL_QUEUE_MESSAGE_INDEX].xTicksToWait =     \
-        xTicksToWait;                                                          \
-    GLOBAL_QUEUE_MESSAGE_BUFFER[GLOBAL_QUEUE_MESSAGE_INDEX].taskIdentifier =   \
-        xTaskGetCurrentTaskHandle();                                           \
-    GLOBAL_QUEUE_MESSAGE_INDEX++;                                              \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
+    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0) {                                    \
+                                                                               \
+      QueueTraceData_Fix *currentMessage =                                     \
+          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
+                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
+                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+                                                                               \
+      currentMessage->c_time = xTaskGetTickCountFromISR();                     \
+      currentMessage->timeStamp = xTaskGetTickCountFromISR();                  \
+      currentMessage->xQueue = xQueue;                                         \
+      currentMessage->xTicksToWait = 10;                                       \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+                                                                               \
+      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
+    }                                                                          \
   }
 
 #endif
