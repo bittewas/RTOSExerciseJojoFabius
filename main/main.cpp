@@ -5,12 +5,14 @@
 #include <Watchy.h>
 #include <cstddef>
 #include <cstring>
+#include <ctime>
 #include <esp_log.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "DS3232RTC.h"
 
 #define TICKS_PER_MS 1000
 
@@ -24,8 +26,9 @@
 #define DISPLAY_BUSY 19
 
 struct QueueTraceData {
+  UBaseType_t messageType;
   TickType_t c_time;
-  TickType_t timeStamp;
+  time_t timeStamp;
   QueueHandle_t xQueue;
   TickType_t xTicksToWait;
   TaskHandle_t taskIdentifier;
@@ -39,6 +42,11 @@ volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER =
 
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> display(WatchyDisplay{});
 QueueHandle_t xQueueHandle;
+DS3232RTC realTimeClock;
+                   
+time_t getCurrentSystemTimeFromWatchy() {
+  return realTimeClock.get();
+}
 
 void initDisplay(void *pvParameters) {
   ESP_LOGI("initDisplay", "initializing display");
@@ -60,7 +68,7 @@ void initDisplay(void *pvParameters) {
   display.setTextColor(GxEPD_WHITE);
   display.setFont(&FreeMonoBold9pt7b);
   display.setCursor(0, 90);
-  display.print("Johannes Bingel!\nFabius Mettner!");
+  display.print("Johannes Bingel!\nFabius Meeettner!");
   display.display(false);
 
   /* Delete the display initialization task. */
@@ -184,33 +192,45 @@ void printingTask(void *pvParameters) {
   }
 }
 
+const BaseType_t TASK_COUNT = 6;
+TaskHandle_t* taskList = new TaskHandle_t[TASK_COUNT];
+
 void debugPrintTask(void *pvParameters) {
   const char *PRINTER_TAG = "QUEUE_DEBUG";
   unsigned int uiMessageIndex = 0;
   vTaskDelay(1000);
+
+  // Kill all created tasks
+  for (BaseType_t i = 0; i < TASK_COUNT; i++) {
+    if (taskList[i] != xTaskGetCurrentTaskHandle())
+      vTaskDelete(taskList[i]);
+  }
+
+  ESP_LOGI(PRINTER_TAG, "Message Type;Queue;C Time;Timestamp;Task ID;Ticks to wait");
   while (uiMessageIndex < GLOBAL_QUEUE_MESSAGE_INDEX) {
     QueueTraceData *currentMessage =
         (QueueTraceData *)(GLOBAL_QUEUE_MESSAGE_BUFFER +
                            uiMessageIndex * GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);
-    ESP_LOGI(PRINTER_TAG, "%d;%d;%d;%d;%d", currentMessage->xQueue,
+    ESP_LOGI(PRINTER_TAG, "%d;%d;%d;%d;%d;%d", currentMessage->messageType, currentMessage->xQueue,
              currentMessage->c_time, currentMessage->timeStamp,
              currentMessage->taskIdentifier, currentMessage->xTicksToWait);
     uiMessageIndex++;
   }
-  while (true) {
-  }
+  vTaskDelete(xTaskGetCurrentTaskHandle());
 }
+
 
 extern "C" void app_main() {
   xQueueHandle = xQueueCreate(10, sizeof(void *));
   if (xQueueHandle == nullptr) {
     // TODO: Queue was not created!
   }
-
+  realTimeClock.begin();
+  
   /* Only priorities from 1-25 (configMAX_PRIORITIES) possible. */
   /* Initialize the display first. */
   xTaskCreate(initDisplay, "initDisplay", 4096, NULL, configMAX_PRIORITIES - 1,
-              NULL);
+              (&taskList[0]));
 
   ProducerParameters *producer1Params =
       (ProducerParameters *)malloc(sizeof(ProducerParameters));
@@ -229,14 +249,14 @@ extern "C" void app_main() {
   producer3Params->name = 'c';
 
   xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer1Params, 1,
-              NULL);
+              (&taskList[1]));
   xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer2Params, 1,
-              NULL);
+              (&taskList[2]));
   xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer3Params, 1,
-              NULL);
-  xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, NULL);
+              (&taskList[3]));
+  xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, (&taskList[4]));
   xTaskCreate(debugPrintTask, "debugTask", 4096, NULL, configMAX_PRIORITIES - 1,
-              NULL);
+              (&taskList[5]));
   // xTaskCreate(buttonWatch, "watch", 8192, NULL, 1, NULL);
   // xTaskCreate(clockCounter, "clock", 16384, NULL, 1, NULL);
 

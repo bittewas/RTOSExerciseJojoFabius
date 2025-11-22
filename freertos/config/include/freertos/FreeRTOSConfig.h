@@ -324,15 +324,18 @@
  * instead.
  */
 #define portNUM_PROCESSORS configNUMBER_OF_CORES
-
 // void traceQueueSendingTask(QueueHandle_t *pxQueue) { return; }
 #ifndef __ASSEMBLER__
+
+#include <time.h>
+time_t getCurrentSystemTimeFromWatchy();
 
 #define traceQUEUE_SEND(xQueue)                                                \
   {                                                                            \
     typedef struct QueueTraceData {                                            \
+      UBaseType_t messageType;                                                 \
       TickType_t c_time;                                                       \
-      TickType_t timeStamp;                                                    \
+      time_t timeStamp;                                                        \
       QueueHandle_t xQueue;                                                    \
       TickType_t xTicksToWait;                                                 \
       TaskHandle_t taskIdentifier;                                             \
@@ -341,6 +344,7 @@
     extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
     extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
     extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+                                                                               \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0) {                                    \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
@@ -348,14 +352,17 @@
                                  GLOBAL_QUEUE_MESSAGE_INDEX *                  \
                                      GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
                                                                                \
+      currentMessage->messageType = 0;                                         \
       currentMessage->c_time = xTaskGetTickCountFromISR();                     \
-      currentMessage->timeStamp = xTaskGetTickCountFromISR();                  \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();                         \
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = 10;                                       \
-      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+                  \
                                                                                \
       GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
 #endif
+
