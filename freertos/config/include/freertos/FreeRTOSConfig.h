@@ -345,7 +345,7 @@ time_t getCurrentSystemTimeFromWatchy();
     extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
     extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0) {                                    \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 && GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                    \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
           (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \

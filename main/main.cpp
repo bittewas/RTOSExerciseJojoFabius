@@ -8,11 +8,13 @@
 #include <ctime>
 #include <esp_log.h>
 
+#include "DS3232RTC.h"
+#include "TimeLib.h"
+#include "Wire.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "DS3232RTC.h"
 
 #define TICKS_PER_MS 1000
 
@@ -42,10 +44,14 @@ volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER =
 
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> display(WatchyDisplay{});
 QueueHandle_t xQueueHandle;
-DS3232RTC realTimeClock;
-                   
+DS3232RTC realTimeClock(Wire);
+
 time_t getCurrentSystemTimeFromWatchy() {
-  return realTimeClock.get();
+  // time_t now;
+  // time(&now);
+  // tmElements_t time;
+  // realTimeClock.read(time);
+  return 10; // time.Minute; // now;
 }
 
 void initDisplay(void *pvParameters) {
@@ -192,8 +198,8 @@ void printingTask(void *pvParameters) {
   }
 }
 
-const BaseType_t TASK_COUNT = 6;
-TaskHandle_t* taskList = new TaskHandle_t[TASK_COUNT];
+const BaseType_t TASK_COUNT = 4;
+TaskHandle_t *taskList = new TaskHandle_t[TASK_COUNT];
 
 void debugPrintTask(void *pvParameters) {
   const char *PRINTER_TAG = "QUEUE_DEBUG";
@@ -202,35 +208,42 @@ void debugPrintTask(void *pvParameters) {
 
   // Kill all created tasks
   for (BaseType_t i = 0; i < TASK_COUNT; i++) {
-    if (taskList[i] != xTaskGetCurrentTaskHandle())
+    ESP_LOGI(PRINTER_TAG, "Delete Tasks %d", i);
+    if (taskList[i] != xTaskGetCurrentTaskHandle() && taskList[i] != NULL)
       vTaskDelete(taskList[i]);
   }
 
-  ESP_LOGI(PRINTER_TAG, "Message Type;Queue;C Time;Timestamp;Task ID;Ticks to wait");
+  ESP_LOGI(PRINTER_TAG,
+           "Message Type;Queue;C Time;Timestamp;Task ID;Ticks to wait");
   while (uiMessageIndex < GLOBAL_QUEUE_MESSAGE_INDEX) {
     QueueTraceData *currentMessage =
         (QueueTraceData *)(GLOBAL_QUEUE_MESSAGE_BUFFER +
                            uiMessageIndex * GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);
-    ESP_LOGI(PRINTER_TAG, "%d;%d;%d;%d;%d;%d", currentMessage->messageType, currentMessage->xQueue,
-             currentMessage->c_time, currentMessage->timeStamp,
-             currentMessage->taskIdentifier, currentMessage->xTicksToWait);
+    ESP_LOGI(PRINTER_TAG, "%d;%d;%d;%d;%d;%d", currentMessage->messageType,
+             currentMessage->xQueue, currentMessage->c_time,
+             currentMessage->timeStamp, currentMessage->taskIdentifier,
+             currentMessage->xTicksToWait);
     uiMessageIndex++;
   }
-  vTaskDelete(xTaskGetCurrentTaskHandle());
+  vTaskDelete(NULL);
+  while (true) {
+  }
 }
-
 
 extern "C" void app_main() {
   xQueueHandle = xQueueCreate(10, sizeof(void *));
   if (xQueueHandle == nullptr) {
     // TODO: Queue was not created!
   }
-  realTimeClock.begin();
-  
+
+  // realTimeClock.begin();
+
+  // ESP_LOGI("app_main", "%s", realTimeClock.get());
+
   /* Only priorities from 1-25 (configMAX_PRIORITIES) possible. */
   /* Initialize the display first. */
   xTaskCreate(initDisplay, "initDisplay", 4096, NULL, configMAX_PRIORITIES - 1,
-              (&taskList[0]));
+              NULL);
 
   ProducerParameters *producer1Params =
       (ProducerParameters *)malloc(sizeof(ProducerParameters));
@@ -249,14 +262,14 @@ extern "C" void app_main() {
   producer3Params->name = 'c';
 
   xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer1Params, 1,
-              (&taskList[1]));
+              (&taskList[0]));
   xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer2Params, 1,
-              (&taskList[2]));
+              (&taskList[1]));
   xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer3Params, 1,
-              (&taskList[3]));
-  xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, (&taskList[4]));
+              (&taskList[2]));
+  xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, (&taskList[3]));
   xTaskCreate(debugPrintTask, "debugTask", 4096, NULL, configMAX_PRIORITIES - 1,
-              (&taskList[5]));
+              NULL);
   // xTaskCreate(buttonWatch, "watch", 8192, NULL, 1, NULL);
   // xTaskCreate(clockCounter, "clock", 16384, NULL, 1, NULL);
 
