@@ -4,6 +4,7 @@
 #include <GxEPD2_BW.h>
 #include <Watchy.h>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <ctime>
 #include <esp_log.h>
@@ -11,6 +12,7 @@
 #include "DS3232RTC.h"
 #include "TimeLib.h"
 #include "Wire.h"
+#include "esp_private/systimer.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <stdio.h>
@@ -27,31 +29,27 @@
 #define DISPLAY_DC 10
 #define DISPLAY_BUSY 19
 
-struct QueueTraceData {
+typedef volatile struct __attribute__((__packed__)) QueueTraceData {
   UBaseType_t messageType;
   TickType_t c_time;
-  time_t timeStamp;
+  uint64_t timeStamp;
   QueueHandle_t xQueue;
   TickType_t xTicksToWait;
   TaskHandle_t taskIdentifier;
-};
+} QueueTraceData_Fix;
 
 volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
 volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE =
-    sizeof(QueueTraceData);
+    sizeof(QueueTraceData_Fix);
 volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER =
-    (char *)malloc(1000 * sizeof(QueueTraceData));
+    (char *)malloc(1000 * sizeof(QueueTraceData_Fix));
 
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> display(WatchyDisplay{});
 QueueHandle_t xQueueHandle;
 DS3232RTC realTimeClock(Wire);
 
-time_t getCurrentSystemTimeFromWatchy() {
-  // time_t now;
-  // time(&now);
-  // tmElements_t time;
-  // realTimeClock.read(time);
-  return 10; // time.Minute; // now;
+uint64_t getCurrentSystemTimeFromWatchy() {
+  return (uint64_t)pdTICKS_TO_MS(xTaskGetTickCountFromISR());
 }
 
 void initDisplay(void *pvParameters) {
@@ -207,23 +205,27 @@ void debugPrintTask(void *pvParameters) {
   vTaskDelay(1000);
 
   // Kill all created tasks
-  for (BaseType_t i = 0; i < TASK_COUNT; i++) {
-    ESP_LOGI(PRINTER_TAG, "Delete Tasks %d", i);
-    if (taskList[i] != xTaskGetCurrentTaskHandle() && taskList[i] != NULL)
-      vTaskDelete(taskList[i]);
-  }
 
   ESP_LOGI(PRINTER_TAG,
            "Message Type;Queue;C Time;Timestamp;Task ID;Ticks to wait");
   while (uiMessageIndex < GLOBAL_QUEUE_MESSAGE_INDEX) {
-    QueueTraceData *currentMessage =
-        (QueueTraceData *)(GLOBAL_QUEUE_MESSAGE_BUFFER +
-                           uiMessageIndex * GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);
+    QueueTraceData_Fix *currentMessage =
+        (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +
+                               uiMessageIndex *
+                                   GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);
     ESP_LOGI(PRINTER_TAG, "%d;%d;%d;%d;%d;%d", currentMessage->messageType,
              currentMessage->xQueue, currentMessage->c_time,
              currentMessage->timeStamp, currentMessage->taskIdentifier,
              currentMessage->xTicksToWait);
     uiMessageIndex++;
+  }
+
+  // Kill all created tasks
+  for (BaseType_t i = 0; i < TASK_COUNT; i++) {
+    ESP_LOGI(PRINTER_TAG, "Delete Tasks %d; %d; %d", i, taskList[i],
+             xTaskGetCurrentTaskHandle());
+    if (taskList[i] != xTaskGetCurrentTaskHandle() && taskList[i] != NULL)
+      vTaskDelete(taskList[i]);
   }
   vTaskDelete(NULL);
   while (true) {

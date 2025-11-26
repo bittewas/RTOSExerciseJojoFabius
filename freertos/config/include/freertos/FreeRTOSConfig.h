@@ -327,15 +327,15 @@
 // void traceQueueSendingTask(QueueHandle_t *pxQueue) { return; }
 #ifndef __ASSEMBLER__
 
-#include <time.h>
-time_t getCurrentSystemTimeFromWatchy();
+#include "stdint.h"
+uint64_t getCurrentSystemTimeFromWatchy();
 
-#define traceQUEUE_SEND(xQueue)                                                \
+#define traceQUEUE_RECEIVE(xQueue)                                             \
   {                                                                            \
     typedef struct QueueTraceData {                                            \
       UBaseType_t messageType;                                                 \
       TickType_t c_time;                                                       \
-      time_t timeStamp;                                                        \
+      uint64_t timeStamp;                                                      \
       QueueHandle_t xQueue;                                                    \
       TickType_t xTicksToWait;                                                 \
       TaskHandle_t taskIdentifier;                                             \
@@ -345,7 +345,8 @@ time_t getCurrentSystemTimeFromWatchy();
     extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
     extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 && GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                    \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
           (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
@@ -353,16 +354,286 @@ time_t getCurrentSystemTimeFromWatchy();
                                      GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
                                                                                \
       currentMessage->messageType = 0;                                         \
+      currentMessage->c_time = xTaskGetTickCount();                            \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
+      currentMessage->xQueue = xQueue;                                         \
+      currentMessage->xTicksToWait = (TickType_t)xTicksToWait;                 \
+                                                                               \
+      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
+    }                                                                          \
+  }
+
+#define traceQUEUE_RECEIVE_FAILED(xQueue)                                      \
+  {                                                                            \
+    typedef struct QueueTraceData {                                            \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint64_t timeStamp;                                                      \
+      QueueHandle_t xQueue;                                                    \
+      TickType_t xTicksToWait;                                                 \
+      TaskHandle_t taskIdentifier;                                             \
+    } QueueTraceData_Fix;                                                      \
+                                                                               \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
+    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+                                                                               \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                   \
+                                                                               \
+      QueueTraceData_Fix *currentMessage =                                     \
+          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
+                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
+                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+                                                                               \
+      currentMessage->messageType = 1;                                         \
+      currentMessage->c_time = xTaskGetTickCount();                            \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
+      currentMessage->xQueue = xQueue;                                         \
+      currentMessage->xTicksToWait = (TickType_t)10;                           \
+                                                                               \
+      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
+    }                                                                          \
+  }
+
+#define traceQUEUE_RECEIVE_FROM_ISR(xQueue)                                    \
+  {                                                                            \
+    typedef struct QueueTraceData {                                            \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint64_t timeStamp;                                                      \
+      QueueHandle_t xQueue;                                                    \
+      TickType_t xTicksToWait;                                                 \
+      TaskHandle_t taskIdentifier;                                             \
+    } QueueTraceData_Fix;                                                      \
+                                                                               \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
+    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+                                                                               \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                   \
+                                                                               \
+      QueueTraceData_Fix *currentMessage =                                     \
+          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
+                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
+                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+                                                                               \
+      currentMessage->messageType = 2;                                         \
       currentMessage->c_time = xTaskGetTickCountFromISR();                     \
       currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
-      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();                         \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
       currentMessage->xQueue = xQueue;                                         \
-      currentMessage->xTicksToWait = 10;                                       \
-                  \
+      currentMessage->xTicksToWait = (TickType_t)0;                            \
+                                                                               \
+      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
+    }                                                                          \
+  }
+
+#define traceQUEUE_RECEIVE_FROM_ISR_FAILED(xQueue)                             \
+  {                                                                            \
+    typedef struct QueueTraceData {                                            \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint64_t timeStamp;                                                      \
+      QueueHandle_t xQueue;                                                    \
+      TickType_t xTicksToWait;                                                 \
+      TaskHandle_t taskIdentifier;                                             \
+    } QueueTraceData_Fix;                                                      \
+                                                                               \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
+    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+                                                                               \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                   \
+                                                                               \
+      QueueTraceData_Fix *currentMessage =                                     \
+          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
+                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
+                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+                                                                               \
+      currentMessage->messageType = 3;                                         \
+      currentMessage->c_time = xTaskGetTickCountFromISR();                     \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
+      currentMessage->xQueue = xQueue;                                         \
+      currentMessage->xTicksToWait = (TickType_t)10;                           \
+                                                                               \
+      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
+    }                                                                          \
+  }
+
+#define traceQUEUE_SEND(xQueue)                                                \
+  {                                                                            \
+    typedef volatile struct __attribute__((__packed__)) QueueTraceData {       \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint64_t timeStamp;                                                      \
+      QueueHandle_t xQueue;                                                    \
+      TickType_t xTicksToWait;                                                 \
+      TaskHandle_t taskIdentifier;                                             \
+    } QueueTraceData_Fix;                                                      \
+                                                                               \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
+    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+                                                                               \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                   \
+                                                                               \
+      QueueTraceData_Fix *currentMessage =                                     \
+          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
+                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
+                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+                                                                               \
+      currentMessage->messageType = 4;                                         \
+      currentMessage->c_time = xTaskGetTickCount();                            \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
+      currentMessage->xQueue = xQueue;                                         \
+      currentMessage->xTicksToWait = (TickType_t)xTicksToWait;                 \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+                                                                               \
+      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
+    }                                                                          \
+  }
+
+#define traceQUEUE_SET_SEND(xQueue)                                            \
+  {                                                                            \
+    typedef volatile struct QueueTraceData {                                   \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint64_t timeStamp;                                                      \
+      QueueHandle_t xQueue;                                                    \
+      TickType_t xTicksToWait;                                                 \
+      TaskHandle_t taskIdentifier;                                             \
+    } QueueTraceData_Fix;                                                      \
+                                                                               \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
+    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+                                                                               \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                   \
+                                                                               \
+      QueueTraceData_Fix *currentMessage =                                     \
+          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
+                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
+                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+                                                                               \
+      currentMessage->messageType = 9;                                         \
+      currentMessage->c_time = xTaskGetTickCount();                            \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
+      currentMessage->xQueue = xQueue;                                         \
+      currentMessage->xTicksToWait = (TickType_t)0;                            \
+                                                                               \
+      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
+    }                                                                          \
+  }
+
+#define traceQUEUE_SEND_FAILED(xQueue)                                         \
+  {                                                                            \
+    typedef struct QueueTraceData {                                            \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint64_t timeStamp;                                                      \
+      QueueHandle_t xQueue;                                                    \
+      TickType_t xTicksToWait;                                                 \
+      TaskHandle_t taskIdentifier;                                             \
+    } QueueTraceData_Fix;                                                      \
+                                                                               \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
+    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+                                                                               \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                   \
+                                                                               \
+      QueueTraceData_Fix *currentMessage =                                     \
+          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
+                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
+                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+                                                                               \
+      currentMessage->messageType = 5;                                         \
+      currentMessage->c_time = xTaskGetTickCount();                            \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
+      currentMessage->xQueue = xQueue;                                         \
+      currentMessage->xTicksToWait = (TickType_t)10;                           \
+                                                                               \
+      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
+    }                                                                          \
+  }
+
+#define traceQUEUE_SEND_FROM_ISR(xQueue)                                       \
+  {                                                                            \
+    typedef struct QueueTraceData {                                            \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint64_t timeStamp;                                                      \
+      QueueHandle_t xQueue;                                                    \
+      TickType_t xTicksToWait;                                                 \
+      TaskHandle_t taskIdentifier;                                             \
+    } QueueTraceData_Fix;                                                      \
+                                                                               \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
+    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+                                                                               \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                   \
+                                                                               \
+      QueueTraceData_Fix *currentMessage =                                     \
+          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
+                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
+                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+                                                                               \
+      currentMessage->messageType = 6;                                         \
+      currentMessage->c_time = xTaskGetTickCountFromISR();                     \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
+      currentMessage->xQueue = xQueue;                                         \
+      currentMessage->xTicksToWait = (TickType_t)10;                           \
+                                                                               \
+      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
+    }                                                                          \
+  }
+
+#define traceQUEUE_SEND_FROM_ISR_FAILED(xQueue)                                \
+  {                                                                            \
+    typedef struct QueueTraceData {                                            \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint64_t timeStamp;                                                      \
+      QueueHandle_t xQueue;                                                    \
+      TickType_t xTicksToWait;                                                 \
+      TaskHandle_t taskIdentifier;                                             \
+    } QueueTraceData_Fix;                                                      \
+                                                                               \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
+    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
+    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
+                                                                               \
+    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 1000) {                                   \
+                                                                               \
+      QueueTraceData_Fix *currentMessage =                                     \
+          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
+                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
+                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+                                                                               \
+      currentMessage->messageType = 7;                                         \
+      currentMessage->c_time = xTaskGetTickCountFromISR();                     \
+      currentMessage->taskIdentifier = xTaskGetCurrentTaskHandle();            \
+      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
+      currentMessage->xQueue = xQueue;                                         \
+      currentMessage->xTicksToWait = (TickType_t)10;                           \
                                                                                \
       GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
 #endif
-
