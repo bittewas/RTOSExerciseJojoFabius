@@ -32,7 +32,7 @@
 typedef volatile struct __attribute__((__packed__)) QueueTraceData {
   UBaseType_t messageType;
   TickType_t c_time;
-  uint64_t timeStamp;
+  uint32_t timeStamp;
   QueueHandle_t xQueue;
   TickType_t xTicksToWait;
   TaskHandle_t taskIdentifier;
@@ -43,13 +43,14 @@ volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE =
     sizeof(QueueTraceData_Fix);
 volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER =
     (char *)malloc(1000 * sizeof(QueueTraceData_Fix));
+TaskHandle_t MONITOR_TASK = 0;
 
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> display(WatchyDisplay{});
 QueueHandle_t xQueueHandle;
 DS3232RTC realTimeClock(Wire);
 
-uint64_t getCurrentSystemTimeFromWatchy() {
-  return (uint64_t)pdTICKS_TO_MS(xTaskGetTickCountFromISR());
+uint32_t getCurrentSystemTimeFromWatchy() {
+  return (uint32_t)pdTICKS_TO_MS(xTaskGetTickCountFromISR());
 }
 
 void initDisplay(void *pvParameters) {
@@ -205,6 +206,11 @@ void debugPrintTask(void *pvParameters) {
   vTaskDelay(1000);
 
   // Kill all created tasks
+  for (BaseType_t i = 0; i < TASK_COUNT; i++) {
+    ESP_LOGI("TASK_NAME", "%d;%s", taskList[i], pcTaskGetName(taskList[i]));
+    if (taskList[i] != xTaskGetCurrentTaskHandle() && taskList[i] != NULL)
+      vTaskDelete(taskList[i]);
+  }
 
   ESP_LOGI(PRINTER_TAG,
            "Message Type;Queue;C Time;Timestamp;Task ID;Ticks to wait");
@@ -220,13 +226,8 @@ void debugPrintTask(void *pvParameters) {
     uiMessageIndex++;
   }
 
-  // Kill all created tasks
-  for (BaseType_t i = 0; i < TASK_COUNT; i++) {
-    ESP_LOGI(PRINTER_TAG, "Delete Tasks %d; %d; %d", i, taskList[i],
-             xTaskGetCurrentTaskHandle());
-    if (taskList[i] != xTaskGetCurrentTaskHandle() && taskList[i] != NULL)
-      vTaskDelete(taskList[i]);
-  }
+
+  ESP_LOGI("FINISH_FLAG", "1");
   vTaskDelete(NULL);
   while (true) {
   }
@@ -263,15 +264,15 @@ extern "C" void app_main() {
   producer3Params->xQueueHandle = xQueueHandle;
   producer3Params->name = 'c';
 
-  xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer1Params, 1,
+  xTaskCreate(producerTasks, "producerTask1", 4096, (void *)producer1Params, 1,
               (&taskList[0]));
-  xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer2Params, 1,
+  xTaskCreate(producerTasks, "producerTask2", 4096, (void *)producer2Params, 1,
               (&taskList[1]));
-  xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer3Params, 1,
+  xTaskCreate(producerTasks, "producerTask3", 4096, (void *)producer3Params, 1,
               (&taskList[2]));
   xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, (&taskList[3]));
   xTaskCreate(debugPrintTask, "debugTask", 4096, NULL, configMAX_PRIORITIES - 1,
-              NULL);
+              &MONITOR_TASK);
   // xTaskCreate(buttonWatch, "watch", 8192, NULL, 1, NULL);
   // xTaskCreate(clockCounter, "clock", 16384, NULL, 1, NULL);
 
