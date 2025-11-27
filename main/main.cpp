@@ -43,6 +43,35 @@ volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE =
     sizeof(QueueTraceData_Fix);
 volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER =
     (char *)malloc(1000 * sizeof(QueueTraceData_Fix));
+
+typedef struct __attribute__((__packed__)) TickTraceData {
+  TickType_t c_time;
+  uint32_t timeStamp;
+  TickType_t newTickTime;
+  TaskHandle_t taskIdentifier;
+} TickTraceData_Fix;
+
+volatile unsigned int GLOBAL_TICK_MESSAGE_INDEX;
+volatile unsigned int GLOBAL_TICK_MESSAGE_ELEMENT_SIZE =
+    sizeof(TickTraceData_Fix);
+volatile char *GLOBAL_TICK_MESSAGE_BUFFER =
+    (char *)malloc(5000 * sizeof(TickTraceData_Fix));
+
+typedef struct __attribute__((__packed__)) TaskTraceData {
+  UBaseType_t messageType;
+  TickType_t c_time;
+  uint32_t timeStamp;
+  TaskHandle_t taskIdentifier;
+  TaskHandle_t affectedTask;
+  TickType_t delay;
+} TaskTraceData_Fix;
+
+volatile unsigned int GLOBAL_TASK_MESSAGE_INDEX;
+volatile unsigned int GLOBAL_TASK_MESSAGE_ELEMENT_SIZE =
+    sizeof(TickTraceData_Fix);
+volatile char *GLOBAL_TASK_MESSAGE_BUFFER =
+    (char *)malloc(1000 * sizeof(TaskTraceData_Fix));
+
 TaskHandle_t MONITOR_TASK = 0;
 
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> display(WatchyDisplay{});
@@ -201,8 +230,6 @@ const BaseType_t TASK_COUNT = 4;
 TaskHandle_t *taskList = new TaskHandle_t[TASK_COUNT];
 
 void debugPrintTask(void *pvParameters) {
-  const char *PRINTER_TAG = "QUEUE_DEBUG";
-  unsigned int uiMessageIndex = 0;
   vTaskDelay(1000);
 
   // Kill all created tasks
@@ -212,20 +239,48 @@ void debugPrintTask(void *pvParameters) {
       vTaskDelete(taskList[i]);
   }
 
-  ESP_LOGI(PRINTER_TAG,
+  ESP_LOGI("QUEUE_DEBUG",
            "Message Type;Queue;C Time;Timestamp;Task ID;Ticks to wait");
+  unsigned int uiMessageIndex = 0;
   while (uiMessageIndex < GLOBAL_QUEUE_MESSAGE_INDEX) {
     QueueTraceData_Fix *currentMessage =
         (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +
                                uiMessageIndex *
                                    GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);
-    ESP_LOGI(PRINTER_TAG, "%d;%d;%d;%d;%d;%d", currentMessage->messageType,
+    ESP_LOGI("QUEUE_DEBUG", "%d;%d;%d;%d;%d;%d", currentMessage->messageType,
              currentMessage->xQueue, currentMessage->c_time,
              currentMessage->timeStamp, currentMessage->taskIdentifier,
              currentMessage->xTicksToWait);
     uiMessageIndex++;
   }
 
+  ESP_LOGI("TICK_DEBUG", "C Time;Timestamp;New Tick Time;Task ID");
+  uiMessageIndex = 0;
+  while (uiMessageIndex < GLOBAL_TICK_MESSAGE_INDEX) {
+    TickTraceData_Fix *currentMessage =
+        (TickTraceData_Fix *)(GLOBAL_TICK_MESSAGE_BUFFER +
+                              uiMessageIndex *
+                                  GLOBAL_TICK_MESSAGE_ELEMENT_SIZE);
+    ESP_LOGI("TICK_DEBUG", "%d;%d;%d;%d", currentMessage->c_time,
+             currentMessage->timeStamp, currentMessage->newTickTime,
+             currentMessage->taskIdentifier);
+    uiMessageIndex++;
+  }
+
+  ESP_LOGI("TASK_DEBUG",
+           "Message Type;C Time;Timestamp;Task ID;Affected Task ID;Delay;%d",
+           GLOBAL_TASK_MESSAGE_INDEX);
+  uiMessageIndex = 0;
+  while (uiMessageIndex < GLOBAL_TASK_MESSAGE_INDEX) {
+    TaskTraceData_Fix *currentMessage =
+        (TaskTraceData_Fix *)(GLOBAL_TASK_MESSAGE_BUFFER +
+                              uiMessageIndex *
+                                  GLOBAL_TASK_MESSAGE_ELEMENT_SIZE);
+    ESP_LOGI("TASK_DEBUG", "%d;%d;%d;%d;%d;%d", currentMessage->c_time,
+             currentMessage->timeStamp, currentMessage->taskIdentifier,
+             currentMessage->affectedTask, currentMessage->delay);
+    uiMessageIndex++;
+  }
 
   ESP_LOGI("FINISH_FLAG", "1");
   vTaskDelete(NULL);
@@ -243,6 +298,8 @@ extern "C" void app_main() {
 
   // ESP_LOGI("app_main", "%s", realTimeClock.get());
 
+  xTaskCreate(debugPrintTask, "debugTask", 4096, NULL, configMAX_PRIORITIES - 1,
+              &MONITOR_TASK);
   /* Only priorities from 1-25 (configMAX_PRIORITIES) possible. */
   /* Initialize the display first. */
   xTaskCreate(initDisplay, "initDisplay", 4096, NULL, configMAX_PRIORITIES - 1,
@@ -271,8 +328,7 @@ extern "C" void app_main() {
   xTaskCreate(producerTasks, "producerTask3", 4096, (void *)producer3Params, 1,
               (&taskList[2]));
   xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, (&taskList[3]));
-  xTaskCreate(debugPrintTask, "debugTask", 4096, NULL, configMAX_PRIORITIES - 1,
-              &MONITOR_TASK);
+
   // xTaskCreate(buttonWatch, "watch", 8192, NULL, 1, NULL);
   // xTaskCreate(clockCounter, "clock", 16384, NULL, 1, NULL);
 
