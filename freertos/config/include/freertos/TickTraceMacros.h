@@ -18,7 +18,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_TICK_MESSAGE_BUFFER != 0 && GLOBAL_TICK_MESSAGE_INDEX < 5000 && \
+    if (GLOBAL_TICK_MESSAGE_BUFFER != 0 && GLOBAL_TICK_MESSAGE_INDEX < 1000 && \
         MONITOR_TASK != 0 && MONITOR_TASK != currentTaskHandle) {              \
                                                                                \
       TickTraceData_Fix *currentMessage =                                      \

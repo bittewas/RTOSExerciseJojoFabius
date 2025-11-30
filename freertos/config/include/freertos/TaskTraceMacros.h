@@ -1,7 +1,9 @@
 #ifndef __ASSEMBLER__
 
 #include "stdint.h"
+#pragma once
 uint32_t getCurrentSystemTimeFromWatchy();
+char *getAndIncrementCurrentTaskMessageBuffer();
 
 #define traceTASK_CREATE(pxNewTCB)                                             \
   {                                                                            \
@@ -14,29 +16,17 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TickType_t delay;                                                        \
     } TaskTraceData_Fix;                                                       \
                                                                                \
-    extern volatile unsigned int GLOBAL_TASK_MESSAGE_INDEX;                    \
-    extern volatile unsigned int GLOBAL_TASK_MESSAGE_ELEMENT_SIZE;             \
-    extern volatile char *GLOBAL_TASK_MESSAGE_BUFFER;                          \
-                                                                               \
-    extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_TASK_MESSAGE_BUFFER != 0 && GLOBAL_TASK_MESSAGE_INDEX < 1000) { \
+    TaskTraceData_Fix *currentMessage =                                        \
+        (TaskTraceData_Fix *)getAndIncrementCurrentTaskMessageBuffer();        \
                                                                                \
-      TaskTraceData_Fix *currentMessage =                                      \
-          (TaskTraceData_Fix *)(GLOBAL_TASK_MESSAGE_BUFFER +                   \
-                                GLOBAL_TASK_MESSAGE_INDEX *                    \
-                                    GLOBAL_TASK_MESSAGE_ELEMENT_SIZE);         \
-                                                                               \
-      currentMessage->messageType = 0;                                         \
-      currentMessage->c_time = xTaskGetTickCount();                            \
-      currentMessage->taskIdentifier = currentTaskHandle;                      \
-      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
-      currentMessage->affectedTask = (TaskHandle_t)pxNewTCB;                   \
-      currentMessage->delay = 0;                                               \
-                                                                               \
-      GLOBAL_TASK_MESSAGE_INDEX++;                                             \
-    }                                                                          \
+    currentMessage->messageType = 0;                                           \
+    currentMessage->c_time = xTaskGetTickCount();                              \
+    currentMessage->taskIdentifier = currentTaskHandle;                        \
+    currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();              \
+    currentMessage->affectedTask = (TaskHandle_t)pxNewTCB;                     \
+    currentMessage->delay = 0;                                                 \
   }
 
 #define traceTASK_CREATE_FAILED(pxNewTCB)                                      \
@@ -50,29 +40,17 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TickType_t delay;                                                        \
     } TaskTraceData_Fix;                                                       \
                                                                                \
-    extern volatile unsigned int GLOBAL_TASK_MESSAGE_INDEX;                    \
-    extern volatile unsigned int GLOBAL_TASK_MESSAGE_ELEMENT_SIZE;             \
-    extern volatile char *GLOBAL_TASK_MESSAGE_BUFFER;                          \
-                                                                               \
-    extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_TASK_MESSAGE_BUFFER != 0 && GLOBAL_TASK_MESSAGE_INDEX < 1000) { \
+    TaskTraceData_Fix *currentMessage =                                        \
+        (TaskTraceData_Fix *)getAndIncrementCurrentTaskMessageBuffer();        \
                                                                                \
-      TaskTraceData_Fix *currentMessage =                                      \
-          (TaskTraceData_Fix *)(GLOBAL_TASK_MESSAGE_BUFFER +                   \
-                                GLOBAL_TASK_MESSAGE_INDEX *                    \
-                                    GLOBAL_TASK_MESSAGE_ELEMENT_SIZE);         \
-                                                                               \
-      currentMessage->messageType = 0;                                         \
-      currentMessage->c_time = xTaskGetTickCount();                            \
-      currentMessage->taskIdentifier = currentTaskHandle;                      \
-      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
-      currentMessage->affectedTask = (TaskHandle_t)pxNewTCB;                   \
-      currentMessage->delay = 0;                                               \
-                                                                               \
-      GLOBAL_TASK_MESSAGE_INDEX++;                                             \
-    }                                                                          \
+    currentMessage->messageType = 1;                                           \
+    currentMessage->c_time = xTaskGetTickCount();                              \
+    currentMessage->taskIdentifier = currentTaskHandle;                        \
+    currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();              \
+    currentMessage->affectedTask = (TaskHandle_t)pxNewTCB;                     \
+    currentMessage->delay = 0;                                                 \
   }
 
 #define traceTASK_DELETE(pxTCB)                                                \
@@ -86,29 +64,108 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TickType_t delay;                                                        \
     } TaskTraceData_Fix;                                                       \
                                                                                \
-    extern volatile unsigned int GLOBAL_TASK_MESSAGE_INDEX;                    \
-    extern volatile unsigned int GLOBAL_TASK_MESSAGE_ELEMENT_SIZE;             \
-    extern volatile char *GLOBAL_TASK_MESSAGE_BUFFER;                          \
-                                                                               \
-    extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_TASK_MESSAGE_BUFFER != 0 && GLOBAL_TASK_MESSAGE_INDEX < 1000) { \
+    TaskTraceData_Fix *currentMessage =                                        \
+        (TaskTraceData_Fix *)getAndIncrementCurrentTaskMessageBuffer();        \
+    currentMessage->messageType = 2;                                           \
+    currentMessage->c_time = xTaskGetTickCount();                              \
+    currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();              \
+    currentMessage->taskIdentifier = currentTaskHandle;                        \
+    currentMessage->affectedTask = (TaskHandle_t)pxTCB;                        \
+    currentMessage->delay = 0;                                                 \
+  }
+
+#define traceTASK_DELAY()                                                      \
+  {                                                                            \
+    typedef struct __attribute__((__packed__)) TaskTraceData {                 \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint32_t timeStamp;                                                      \
+      TaskHandle_t taskIdentifier;                                             \
+      TaskHandle_t affectedTask;                                               \
+      TickType_t delay;                                                        \
+    } TaskTraceData_Fix;                                                       \
                                                                                \
-      TaskTraceData_Fix *currentMessage =                                      \
-          (TaskTraceData_Fix *)(GLOBAL_TASK_MESSAGE_BUFFER +                   \
-                                GLOBAL_TASK_MESSAGE_INDEX *                    \
-                                    GLOBAL_TASK_MESSAGE_ELEMENT_SIZE);         \
+    TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-      currentMessage->messageType = 0;                                         \
-      currentMessage->c_time = xTaskGetTickCount();                            \
-      currentMessage->taskIdentifier = currentTaskHandle;                      \
-      currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();            \
-      currentMessage->affectedTask = (TaskHandle_t)pxTCB;                      \
-      currentMessage->delay = 0;                                               \
+    TaskTraceData_Fix *currentMessage =                                        \
+        (TaskTraceData_Fix *)getAndIncrementCurrentTaskMessageBuffer();        \
+    currentMessage->messageType = 3;                                           \
+    currentMessage->c_time = xTaskGetTickCount();                              \
+    currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();              \
+    currentMessage->taskIdentifier = currentTaskHandle;                        \
+    currentMessage->affectedTask = (TaskHandle_t)0;                            \
+    currentMessage->delay = xTicksToDelay;                                     \
+  }
+
+#define traceTASK_DELAY_UNTIL(x)                                               \
+  {                                                                            \
+    typedef struct __attribute__((__packed__)) TaskTraceData {                 \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint32_t timeStamp;                                                      \
+      TaskHandle_t taskIdentifier;                                             \
+      TaskHandle_t affectedTask;                                               \
+      TickType_t delay;                                                        \
+    } TaskTraceData_Fix;                                                       \
                                                                                \
-      GLOBAL_TASK_MESSAGE_INDEX++;                                             \
-    }                                                                          \
+    TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
+                                                                               \
+    TaskTraceData_Fix *currentMessage =                                        \
+        (TaskTraceData_Fix *)getAndIncrementCurrentTaskMessageBuffer();        \
+    currentMessage->messageType = 4;                                           \
+    currentMessage->c_time = xTaskGetTickCount();                              \
+    currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();              \
+    currentMessage->taskIdentifier = currentTaskHandle;                        \
+    currentMessage->affectedTask = (TaskHandle_t)0;                            \
+    currentMessage->delay = (TickType_t)x;                                     \
+  }
+
+#define traceTASK_SWITCHED_IN()                                                \
+  {                                                                            \
+    typedef struct __attribute__((__packed__)) TaskTraceData {                 \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint32_t timeStamp;                                                      \
+      TaskHandle_t taskIdentifier;                                             \
+      TaskHandle_t affectedTask;                                               \
+      TickType_t delay;                                                        \
+    } TaskTraceData_Fix;                                                       \
+                                                                               \
+    TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
+                                                                               \
+    TaskTraceData_Fix *currentMessage =                                        \
+        (TaskTraceData_Fix *)getAndIncrementCurrentTaskMessageBuffer();        \
+    currentMessage->messageType = 5;                                           \
+    currentMessage->c_time = xTaskGetTickCount();                              \
+    currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();              \
+    currentMessage->taskIdentifier = currentTaskHandle;                        \
+    currentMessage->affectedTask = currentTaskHandle;                          \
+    currentMessage->delay = (TickType_t)0;                                     \
+  }
+
+#define traceTASK_SWITCHED_OUT()                                               \
+  {                                                                            \
+    typedef struct __attribute__((__packed__)) TaskTraceData {                 \
+      UBaseType_t messageType;                                                 \
+      TickType_t c_time;                                                       \
+      uint32_t timeStamp;                                                      \
+      TaskHandle_t taskIdentifier;                                             \
+      TaskHandle_t affectedTask;                                               \
+      TickType_t delay;                                                        \
+    } TaskTraceData_Fix;                                                       \
+                                                                               \
+    TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
+                                                                               \
+    TaskTraceData_Fix *currentMessage =                                        \
+        (TaskTraceData_Fix *)getAndIncrementCurrentTaskMessageBuffer();        \
+    currentMessage->messageType = 6;                                           \
+    currentMessage->c_time = xTaskGetTickCount();                              \
+    currentMessage->timeStamp = getCurrentSystemTimeFromWatchy();              \
+    currentMessage->taskIdentifier = currentTaskHandle;                        \
+    currentMessage->affectedTask = currentTaskHandle;                          \
+    currentMessage->delay = (TickType_t)0;                                     \
   }
 
 #endif

@@ -12,6 +12,7 @@
 #include "DS3232RTC.h"
 #include "TimeLib.h"
 #include "Wire.h"
+#include "esp_cpu.h"
 #include "esp_private/systimer.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -42,7 +43,7 @@ volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
 volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE =
     sizeof(QueueTraceData_Fix);
 volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER =
-    (char *)malloc(1000 * sizeof(QueueTraceData_Fix));
+    (char *)malloc(500 * sizeof(QueueTraceData_Fix));
 
 typedef struct __attribute__((__packed__)) TickTraceData {
   TickType_t c_time;
@@ -55,7 +56,7 @@ volatile unsigned int GLOBAL_TICK_MESSAGE_INDEX;
 volatile unsigned int GLOBAL_TICK_MESSAGE_ELEMENT_SIZE =
     sizeof(TickTraceData_Fix);
 volatile char *GLOBAL_TICK_MESSAGE_BUFFER =
-    (char *)malloc(5000 * sizeof(TickTraceData_Fix));
+    (char *)malloc(1000 * sizeof(TickTraceData_Fix));
 
 typedef struct __attribute__((__packed__)) TaskTraceData {
   UBaseType_t messageType;
@@ -66,11 +67,12 @@ typedef struct __attribute__((__packed__)) TaskTraceData {
   TickType_t delay;
 } TaskTraceData_Fix;
 
-volatile unsigned int GLOBAL_TASK_MESSAGE_INDEX;
-volatile unsigned int GLOBAL_TASK_MESSAGE_ELEMENT_SIZE =
-    sizeof(TickTraceData_Fix);
-volatile char *GLOBAL_TASK_MESSAGE_BUFFER =
-    (char *)malloc(1000 * sizeof(TaskTraceData_Fix));
+unsigned int GLOBAL_TASK_MESSAGE_INDEX = 0;
+unsigned int GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+char *GLOBAL_TASK_MESSAGE_BUFFER =
+    (char *)malloc(200 * sizeof(TaskTraceData_Fix));
+
+unsigned char ERROR_FLAG = 0;
 
 TaskHandle_t MONITOR_TASK = 0;
 
@@ -79,7 +81,23 @@ QueueHandle_t xQueueHandle;
 DS3232RTC realTimeClock(Wire);
 
 uint32_t getCurrentSystemTimeFromWatchy() {
-  return (uint32_t)pdTICKS_TO_MS(xTaskGetTickCountFromISR());
+  return (uint32_t)esp_cpu_get_cycle_count();
+}
+
+char *getAndIncrementCurrentTaskMessageBuffer() {
+  if (GLOBAL_TASK_MESSAGE_BUFFER == 0) {
+    GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+    GLOBAL_TASK_MESSAGE_BUFFER =
+        (char *)malloc(200 * sizeof(TaskTraceData_Fix));
+  }
+  char *position = GLOBAL_TASK_MESSAGE_BUFFER +
+                   GLOBAL_TASK_MESSAGE_INDEX * GLOBAL_TASK_MESSAGE_ELEMENT_SIZE;
+  GLOBAL_TASK_MESSAGE_INDEX += 1;
+  if (GLOBAL_TASK_MESSAGE_INDEX >= 200) {
+    GLOBAL_TASK_MESSAGE_INDEX = 199;
+    ERROR_FLAG |= 0x04;
+  }
+  return position;
 }
 
 void initDisplay(void *pvParameters) {
@@ -268,7 +286,7 @@ void debugPrintTask(void *pvParameters) {
   }
 
   ESP_LOGI("TASK_DEBUG",
-           "Message Type;C Time;Timestamp;Task ID;Affected Task ID;Delay;%d",
+           "Message Type;C Time;Timestamp;Task ID;Affected Task ID;Delay",
            GLOBAL_TASK_MESSAGE_INDEX);
   uiMessageIndex = 0;
   while (uiMessageIndex < GLOBAL_TASK_MESSAGE_INDEX) {
@@ -276,19 +294,27 @@ void debugPrintTask(void *pvParameters) {
         (TaskTraceData_Fix *)(GLOBAL_TASK_MESSAGE_BUFFER +
                               uiMessageIndex *
                                   GLOBAL_TASK_MESSAGE_ELEMENT_SIZE);
-    ESP_LOGI("TASK_DEBUG", "%d;%d;%d;%d;%d;%d", currentMessage->c_time,
-             currentMessage->timeStamp, currentMessage->taskIdentifier,
-             currentMessage->affectedTask, currentMessage->delay);
+    ESP_LOGI("TASK_DEBUG", "%d;%d;%d;%d;%d;%d", currentMessage->messageType,
+             currentMessage->c_time, currentMessage->timeStamp,
+             currentMessage->taskIdentifier, currentMessage->affectedTask,
+             currentMessage->delay);
     uiMessageIndex++;
   }
 
-  ESP_LOGI("FINISH_FLAG", "1");
+  ESP_LOGI("FINISH_FLAG", "%x", ERROR_FLAG);
   vTaskDelete(NULL);
   while (true) {
   }
 }
 
 extern "C" void app_main() {
+  while (GLOBAL_TASK_MESSAGE_BUFFER == 0) {
+    GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+    GLOBAL_TASK_MESSAGE_BUFFER =
+        (char *)malloc(200 * sizeof(TaskTraceData_Fix));
+    ESP_LOGI("MAIN", "Buffer created %d", GLOBAL_TASK_MESSAGE_BUFFER);
+  }
+
   xQueueHandle = xQueueCreate(10, sizeof(void *));
   if (xQueueHandle == nullptr) {
     // TODO: Queue was not created!

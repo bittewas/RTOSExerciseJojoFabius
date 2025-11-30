@@ -21,7 +21,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 1000 && MONITOR_TASK != 0 &&              \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
         MONITOR_TASK != currentTaskHandle) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
@@ -58,7 +58,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 1000 && MONITOR_TASK != 0 &&              \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
         MONITOR_TASK != currentTaskHandle) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
@@ -95,7 +95,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 1000 && MONITOR_TASK != 0 &&              \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
         MONITOR_TASK != currentTaskHandle) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
@@ -132,7 +132,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 1000 && MONITOR_TASK != 0 &&              \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
         MONITOR_TASK != currentTaskHandle) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
@@ -169,7 +169,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 1000 && MONITOR_TASK != 0 &&              \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
         MONITOR_TASK != currentTaskHandle) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
@@ -206,7 +206,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 1000 && MONITOR_TASK != 0 &&              \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
         MONITOR_TASK != currentTaskHandle) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
@@ -243,7 +243,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 1000 && MONITOR_TASK != 0 &&              \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
         MONITOR_TASK != currentTaskHandle) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
@@ -280,7 +280,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 1000 && MONITOR_TASK != 0 &&              \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
         MONITOR_TASK != currentTaskHandle) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
@@ -317,7 +317,7 @@ uint32_t getCurrentSystemTimeFromWatchy();
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
     if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 1000 && MONITOR_TASK != 0 &&              \
+        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
         MONITOR_TASK != currentTaskHandle) {                                   \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
