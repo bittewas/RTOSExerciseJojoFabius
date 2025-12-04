@@ -3,6 +3,8 @@
 #include "stdint.h"
 uint32_t getCurrentSystemTimeFromWatchy();
 
+char *getAndIncrementCurrentQueueMessageBuffer();
+
 #define traceQUEUE_RECEIVE(xQueue)                                             \
   {                                                                            \
     typedef struct QueueTraceData {                                            \
@@ -14,20 +16,13 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TaskHandle_t taskIdentifier;                                             \
     } QueueTraceData_Fix;                                                      \
                                                                                \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
-    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
-        MONITOR_TASK != currentTaskHandle) {                                   \
+    if (MONITOR_TASK != 0 && MONITOR_TASK != currentTaskHandle) {              \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
-          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
-                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
-                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+          (QueueTraceData_Fix *) getAndIncrementCurrentQueueMessageBuffer();   \
                                                                                \
       currentMessage->messageType = 0;                                         \
       currentMessage->c_time = xTaskGetTickCount();                            \
@@ -36,7 +31,6 @@ uint32_t getCurrentSystemTimeFromWatchy();
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = (TickType_t)xTicksToWait;                 \
                                                                                \
-      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
@@ -51,20 +45,13 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TaskHandle_t taskIdentifier;                                             \
     } QueueTraceData_Fix;                                                      \
                                                                                \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
-    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
-        MONITOR_TASK != currentTaskHandle) {                                   \
+    if (MONITOR_TASK != 0 &&  MONITOR_TASK != currentTaskHandle) {             \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
-          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
-                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
-                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+          (QueueTraceData_Fix *) getAndIncrementCurrentQueueMessageBuffer();   \
                                                                                \
       currentMessage->messageType = 1;                                         \
       currentMessage->c_time = xTaskGetTickCount();                            \
@@ -73,7 +60,6 @@ uint32_t getCurrentSystemTimeFromWatchy();
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = (TickType_t)xTicksToWait;                 \
                                                                                \
-      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
@@ -88,20 +74,13 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TaskHandle_t taskIdentifier;                                             \
     } QueueTraceData_Fix;                                                      \
                                                                                \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
-    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
-        MONITOR_TASK != currentTaskHandle) {                                   \
+    if (MONITOR_TASK != 0 && MONITOR_TASK != currentTaskHandle) {              \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
-          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
-                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
-                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+          (QueueTraceData_Fix *) getAndIncrementCurrentQueueMessageBuffer();   \
                                                                                \
       currentMessage->messageType = 2;                                         \
       currentMessage->c_time = xTaskGetTickCountFromISR();                     \
@@ -110,7 +89,6 @@ uint32_t getCurrentSystemTimeFromWatchy();
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = (TickType_t)0;                            \
                                                                                \
-      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
@@ -125,20 +103,13 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TaskHandle_t taskIdentifier;                                             \
     } QueueTraceData_Fix;                                                      \
                                                                                \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
-    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
-        MONITOR_TASK != currentTaskHandle) {                                   \
+    if (MONITOR_TASK != 0 && MONITOR_TASK != currentTaskHandle) {              \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
-          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
-                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
-                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+          (QueueTraceData_Fix *) getAndIncrementCurrentQueueMessageBuffer();   \
                                                                                \
       currentMessage->messageType = 3;                                         \
       currentMessage->c_time = xTaskGetTickCountFromISR();                     \
@@ -147,7 +118,6 @@ uint32_t getCurrentSystemTimeFromWatchy();
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = (TickType_t)0;                            \
                                                                                \
-      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
@@ -162,20 +132,13 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TaskHandle_t taskIdentifier;                                             \
     } QueueTraceData_Fix;                                                      \
                                                                                \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
-    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
-        MONITOR_TASK != currentTaskHandle) {                                   \
+    if (MONITOR_TASK != 0 && MONITOR_TASK != currentTaskHandle) {              \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
-          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
-                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
-                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+          (QueueTraceData_Fix *) getAndIncrementCurrentQueueMessageBuffer();   \
                                                                                \
       currentMessage->messageType = 4;                                         \
       currentMessage->c_time = xTaskGetTickCount();                            \
@@ -184,7 +147,6 @@ uint32_t getCurrentSystemTimeFromWatchy();
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = (TickType_t)xTicksToWait;                 \
                                                                                \
-      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
@@ -199,20 +161,13 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TaskHandle_t taskIdentifier;                                             \
     } QueueTraceData_Fix;                                                      \
                                                                                \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
-    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
-        MONITOR_TASK != currentTaskHandle) {                                   \
+    if (MONITOR_TASK != 0 && MONITOR_TASK != currentTaskHandle) {              \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
-          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
-                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
-                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+          (QueueTraceData_Fix *) getAndIncrementCurrentQueueMessageBuffer();   \
                                                                                \
       currentMessage->messageType = 8;                                         \
       currentMessage->c_time = xTaskGetTickCount();                            \
@@ -221,7 +176,6 @@ uint32_t getCurrentSystemTimeFromWatchy();
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = (TickType_t)0;                            \
                                                                                \
-      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
@@ -236,20 +190,13 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TaskHandle_t taskIdentifier;                                             \
     } QueueTraceData_Fix;                                                      \
                                                                                \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
-    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
-        MONITOR_TASK != currentTaskHandle) {                                   \
+    if (MONITOR_TASK != 0 && MONITOR_TASK != currentTaskHandle) {              \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
-          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
-                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
-                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+          (QueueTraceData_Fix *) getAndIncrementCurrentQueueMessageBuffer();   \
                                                                                \
       currentMessage->messageType = 5;                                         \
       currentMessage->c_time = xTaskGetTickCount();                            \
@@ -258,7 +205,6 @@ uint32_t getCurrentSystemTimeFromWatchy();
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = (TickType_t)xTicksToWait;                 \
                                                                                \
-      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
@@ -273,20 +219,13 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TaskHandle_t taskIdentifier;                                             \
     } QueueTraceData_Fix;                                                      \
                                                                                \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
-    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
-        MONITOR_TASK != currentTaskHandle) {                                   \
+    if (MONITOR_TASK != 0 && MONITOR_TASK != currentTaskHandle) {              \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
-          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
-                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
-                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+          (QueueTraceData_Fix *) getAndIncrementCurrentQueueMessageBuffer();   \
                                                                                \
       currentMessage->messageType = 6;                                         \
       currentMessage->c_time = xTaskGetTickCountFromISR();                     \
@@ -295,7 +234,6 @@ uint32_t getCurrentSystemTimeFromWatchy();
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = (TickType_t)0;                            \
                                                                                \
-      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 
@@ -310,20 +248,13 @@ uint32_t getCurrentSystemTimeFromWatchy();
       TaskHandle_t taskIdentifier;                                             \
     } QueueTraceData_Fix;                                                      \
                                                                                \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;                   \
-    extern volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;            \
-    extern volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER;                         \
     extern TaskHandle_t MONITOR_TASK;                                          \
     TaskHandle_t currentTaskHandle = xTaskGetCurrentTaskHandle();              \
                                                                                \
-    if (GLOBAL_QUEUE_MESSAGE_BUFFER != 0 &&                                    \
-        GLOBAL_QUEUE_MESSAGE_INDEX < 500 && MONITOR_TASK != 0 &&               \
-        MONITOR_TASK != currentTaskHandle) {                                   \
+    if (MONITOR_TASK != 0 && MONITOR_TASK != currentTaskHandle) {              \
                                                                                \
       QueueTraceData_Fix *currentMessage =                                     \
-          (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +                 \
-                                 GLOBAL_QUEUE_MESSAGE_INDEX *                  \
-                                     GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);       \
+          (QueueTraceData_Fix *) getAndIncrementCurrentQueueMessageBuffer();   \
                                                                                \
       currentMessage->messageType = 7;                                         \
       currentMessage->c_time = xTaskGetTickCountFromISR();                     \
@@ -332,7 +263,6 @@ uint32_t getCurrentSystemTimeFromWatchy();
       currentMessage->xQueue = xQueue;                                         \
       currentMessage->xTicksToWait = (TickType_t)0;                            \
                                                                                \
-      GLOBAL_QUEUE_MESSAGE_INDEX++;                                            \
     }                                                                          \
   }
 

@@ -39,11 +39,15 @@ typedef volatile struct __attribute__((__packed__)) QueueTraceData {
   TaskHandle_t taskIdentifier;
 } QueueTraceData_Fix;
 
-volatile unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
-volatile unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE =
+const unsigned int QUEUE_MESSAGE_BUFFER_SIZE = 200;
+const unsigned int TICK_MESSAGE_BUFFER_SIZE = 1010;
+const unsigned int TASK_MESSAGE_BUFFER_SIZE = 200;
+
+unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
+unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE =
     sizeof(QueueTraceData_Fix);
-volatile char *GLOBAL_QUEUE_MESSAGE_BUFFER =
-    (char *)malloc(500 * sizeof(QueueTraceData_Fix));
+char *GLOBAL_QUEUE_MESSAGE_BUFFER =
+    (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(QueueTraceData_Fix));
 
 typedef struct __attribute__((__packed__)) TickTraceData {
   TickType_t c_time;
@@ -52,11 +56,11 @@ typedef struct __attribute__((__packed__)) TickTraceData {
   TaskHandle_t taskIdentifier;
 } TickTraceData_Fix;
 
-volatile unsigned int GLOBAL_TICK_MESSAGE_INDEX;
-volatile unsigned int GLOBAL_TICK_MESSAGE_ELEMENT_SIZE =
+unsigned int GLOBAL_TICK_MESSAGE_INDEX;
+unsigned int GLOBAL_TICK_MESSAGE_ELEMENT_SIZE =
     sizeof(TickTraceData_Fix);
-volatile char *GLOBAL_TICK_MESSAGE_BUFFER =
-    (char *)malloc(1000 * sizeof(TickTraceData_Fix));
+char *GLOBAL_TICK_MESSAGE_BUFFER =
+    (char *)malloc(TICK_MESSAGE_BUFFER_SIZE * sizeof(TickTraceData_Fix));
 
 typedef struct __attribute__((__packed__)) TaskTraceData {
   UBaseType_t messageType;
@@ -70,7 +74,7 @@ typedef struct __attribute__((__packed__)) TaskTraceData {
 unsigned int GLOBAL_TASK_MESSAGE_INDEX = 0;
 unsigned int GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
 char *GLOBAL_TASK_MESSAGE_BUFFER =
-    (char *)malloc(200 * sizeof(TaskTraceData_Fix));
+    (char *)malloc(TASK_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
 
 unsigned char ERROR_FLAG = 0;
 
@@ -84,17 +88,49 @@ uint32_t getCurrentSystemTimeFromWatchy() {
   return (uint32_t)esp_cpu_get_cycle_count();
 }
 
+char *getAndIncrementCurrentQueueMessageBuffer() {
+  if (GLOBAL_QUEUE_MESSAGE_BUFFER == 0) {
+    GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+    GLOBAL_QUEUE_MESSAGE_BUFFER =
+        (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
+  }
+  char *position = GLOBAL_QUEUE_MESSAGE_BUFFER +
+                   GLOBAL_QUEUE_MESSAGE_INDEX * GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;
+  GLOBAL_QUEUE_MESSAGE_INDEX += 1;
+  if (GLOBAL_QUEUE_MESSAGE_INDEX >= QUEUE_MESSAGE_BUFFER_SIZE) {
+    GLOBAL_QUEUE_MESSAGE_INDEX = QUEUE_MESSAGE_BUFFER_SIZE - 1;
+    ERROR_FLAG |= 0x01;
+  }
+  return position;
+}
+
+char *getAndIncrementCurrentTickMessageBuffer() {
+  if (GLOBAL_TICK_MESSAGE_BUFFER == 0) {
+    GLOBAL_TICK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+    GLOBAL_TICK_MESSAGE_BUFFER =
+        (char *)malloc(TICK_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
+  }
+  char *position = GLOBAL_TICK_MESSAGE_BUFFER +
+                   GLOBAL_TICK_MESSAGE_INDEX * GLOBAL_TICK_MESSAGE_ELEMENT_SIZE;
+  GLOBAL_TICK_MESSAGE_INDEX += 1;
+  if (GLOBAL_TICK_MESSAGE_INDEX >= TICK_MESSAGE_BUFFER_SIZE) {
+    GLOBAL_TICK_MESSAGE_INDEX = TICK_MESSAGE_BUFFER_SIZE - 1;
+    ERROR_FLAG |= 0x02;
+  }
+  return position;
+}
+
 char *getAndIncrementCurrentTaskMessageBuffer() {
   if (GLOBAL_TASK_MESSAGE_BUFFER == 0) {
     GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
     GLOBAL_TASK_MESSAGE_BUFFER =
-        (char *)malloc(200 * sizeof(TaskTraceData_Fix));
+        (char *)malloc(TASK_MESSAGE_BUFFER_SIZE* sizeof(TaskTraceData_Fix));
   }
   char *position = GLOBAL_TASK_MESSAGE_BUFFER +
                    GLOBAL_TASK_MESSAGE_INDEX * GLOBAL_TASK_MESSAGE_ELEMENT_SIZE;
   GLOBAL_TASK_MESSAGE_INDEX += 1;
-  if (GLOBAL_TASK_MESSAGE_INDEX >= 200) {
-    GLOBAL_TASK_MESSAGE_INDEX = 199;
+  if (GLOBAL_TASK_MESSAGE_INDEX >= TASK_MESSAGE_BUFFER_SIZE) {
+    GLOBAL_TASK_MESSAGE_INDEX = TASK_MESSAGE_BUFFER_SIZE - 1;
     ERROR_FLAG |= 0x04;
   }
   return position;
@@ -311,8 +347,22 @@ extern "C" void app_main() {
   while (GLOBAL_TASK_MESSAGE_BUFFER == 0) {
     GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
     GLOBAL_TASK_MESSAGE_BUFFER =
-        (char *)malloc(200 * sizeof(TaskTraceData_Fix));
+        (char *)malloc(TASK_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
     ESP_LOGI("MAIN", "Buffer created %d", GLOBAL_TASK_MESSAGE_BUFFER);
+  }
+
+  while (GLOBAL_QUEUE_MESSAGE_BUFFER == 0) {
+    GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE = sizeof(QueueTraceData_Fix);
+    GLOBAL_QUEUE_MESSAGE_BUFFER =
+        (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(QueueTraceData_Fix));
+    ESP_LOGI("MAIN", "Buffer created %d", GLOBAL_QUEUE_MESSAGE_BUFFER);
+  }
+
+  while (GLOBAL_TICK_MESSAGE_BUFFER == 0) {
+    GLOBAL_TICK_MESSAGE_ELEMENT_SIZE = sizeof(TickTraceData_Fix);
+    GLOBAL_TICK_MESSAGE_BUFFER =
+        (char *)malloc(TICK_MESSAGE_BUFFER_SIZE * sizeof(TickTraceData_Fix));
+    ESP_LOGI("MAIN", "Buffer created %d", GLOBAL_TICK_MESSAGE_BUFFER);
   }
 
   xQueueHandle = xQueueCreate(10, sizeof(void *));
