@@ -4,8 +4,16 @@
 #include <GxEPD2_BW.h>
 #include <Watchy.h>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <ctime>
 #include <esp_log.h>
+
+#include "DS3232RTC.h"
+#include "TimeLib.h"
+#include "Wire.h"
+#include "esp_cpu.h"
+#include "esp_private/systimer.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <stdio.h>
@@ -22,8 +30,111 @@
 #define DISPLAY_DC 10
 #define DISPLAY_BUSY 19
 
+typedef volatile struct __attribute__((__packed__)) QueueTraceData {
+  UBaseType_t messageType;
+  TickType_t c_time;
+  uint32_t timeStamp;
+  QueueHandle_t xQueue;
+  TickType_t xTicksToWait;
+  TaskHandle_t taskIdentifier;
+} QueueTraceData_Fix;
+
+const unsigned int QUEUE_MESSAGE_BUFFER_SIZE = 200;
+const unsigned int TICK_MESSAGE_BUFFER_SIZE = 1010;
+const unsigned int TASK_MESSAGE_BUFFER_SIZE = 200;
+
+unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
+unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE =
+    sizeof(QueueTraceData_Fix);
+char *GLOBAL_QUEUE_MESSAGE_BUFFER =
+    (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(QueueTraceData_Fix));
+
+typedef struct __attribute__((__packed__)) TickTraceData {
+  TickType_t c_time;
+  uint32_t timeStamp;
+  TickType_t newTickTime;
+  TaskHandle_t taskIdentifier;
+} TickTraceData_Fix;
+
+unsigned int GLOBAL_TICK_MESSAGE_INDEX;
+unsigned int GLOBAL_TICK_MESSAGE_ELEMENT_SIZE =
+    sizeof(TickTraceData_Fix);
+char *GLOBAL_TICK_MESSAGE_BUFFER =
+    (char *)malloc(TICK_MESSAGE_BUFFER_SIZE * sizeof(TickTraceData_Fix));
+
+typedef struct __attribute__((__packed__)) TaskTraceData {
+  UBaseType_t messageType;
+  TickType_t c_time;
+  uint32_t timeStamp;
+  TaskHandle_t taskIdentifier;
+  TaskHandle_t affectedTask;
+  TickType_t delay;
+} TaskTraceData_Fix;
+
+unsigned int GLOBAL_TASK_MESSAGE_INDEX = 0;
+unsigned int GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+char *GLOBAL_TASK_MESSAGE_BUFFER =
+    (char *)malloc(TASK_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
+
+unsigned char ERROR_FLAG = 0;
+
+TaskHandle_t MONITOR_TASK = 0;
+
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> display(WatchyDisplay{});
 QueueHandle_t xQueueHandle;
+DS3232RTC realTimeClock(Wire);
+
+uint32_t getCurrentSystemTimeFromWatchy() {
+  return (uint32_t)esp_cpu_get_cycle_count();
+}
+
+char *getAndIncrementCurrentQueueMessageBuffer() {
+  if (GLOBAL_QUEUE_MESSAGE_BUFFER == 0) {
+    GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+    GLOBAL_QUEUE_MESSAGE_BUFFER =
+        (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
+  }
+  char *position = GLOBAL_QUEUE_MESSAGE_BUFFER +
+                   GLOBAL_QUEUE_MESSAGE_INDEX * GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;
+  GLOBAL_QUEUE_MESSAGE_INDEX += 1;
+  if (GLOBAL_QUEUE_MESSAGE_INDEX >= QUEUE_MESSAGE_BUFFER_SIZE) {
+    GLOBAL_QUEUE_MESSAGE_INDEX = QUEUE_MESSAGE_BUFFER_SIZE - 1;
+    ERROR_FLAG |= 0x01;
+  }
+  return position;
+}
+
+char *getAndIncrementCurrentTickMessageBuffer() {
+  if (GLOBAL_TICK_MESSAGE_BUFFER == 0) {
+    GLOBAL_TICK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+    GLOBAL_TICK_MESSAGE_BUFFER =
+        (char *)malloc(TICK_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
+  }
+  char *position = GLOBAL_TICK_MESSAGE_BUFFER +
+                   GLOBAL_TICK_MESSAGE_INDEX * GLOBAL_TICK_MESSAGE_ELEMENT_SIZE;
+  GLOBAL_TICK_MESSAGE_INDEX += 1;
+  if (GLOBAL_TICK_MESSAGE_INDEX >= TICK_MESSAGE_BUFFER_SIZE) {
+    GLOBAL_TICK_MESSAGE_INDEX = TICK_MESSAGE_BUFFER_SIZE - 1;
+    ERROR_FLAG |= 0x02;
+  }
+  return position;
+}
+
+char *getAndIncrementCurrentTaskMessageBuffer() {
+  if (GLOBAL_TASK_MESSAGE_BUFFER == 0) {
+    GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+    GLOBAL_TASK_MESSAGE_BUFFER =
+        (char *)malloc(TASK_MESSAGE_BUFFER_SIZE* sizeof(TaskTraceData_Fix));
+  }
+  char *position = GLOBAL_TASK_MESSAGE_BUFFER +
+                   GLOBAL_TASK_MESSAGE_INDEX * GLOBAL_TASK_MESSAGE_ELEMENT_SIZE;
+  GLOBAL_TASK_MESSAGE_INDEX += 1;
+  if (GLOBAL_TASK_MESSAGE_INDEX >= TASK_MESSAGE_BUFFER_SIZE) {
+    GLOBAL_TASK_MESSAGE_INDEX = TASK_MESSAGE_BUFFER_SIZE - 1;
+    ERROR_FLAG |= 0x04;
+  }
+  return position;
+}
 
 void initDisplay(void *pvParameters) {
   ESP_LOGI("initDisplay", "initializing display");
@@ -45,7 +156,7 @@ void initDisplay(void *pvParameters) {
   display.setTextColor(GxEPD_WHITE);
   display.setFont(&FreeMonoBold9pt7b);
   display.setCursor(0, 90);
-  display.print("Johannes Bingel!\nFabius Mettner!");
+  display.print("Johannes Bingel!\nFabius Meeettner!");
   display.display(false);
 
   /* Delete the display initialization task. */
@@ -169,12 +280,102 @@ void printingTask(void *pvParameters) {
   }
 }
 
+const BaseType_t TASK_COUNT = 4;
+TaskHandle_t *taskList = new TaskHandle_t[TASK_COUNT];
+
+void debugPrintTask(void *pvParameters) {
+  vTaskDelay(1000);
+
+  // Kill all created tasks
+  for (BaseType_t i = 0; i < TASK_COUNT; i++) {
+    ESP_LOGI("TASK_NAME", "%d;%s", taskList[i], pcTaskGetName(taskList[i]));
+    if (taskList[i] != xTaskGetCurrentTaskHandle() && taskList[i] != NULL)
+      vTaskDelete(taskList[i]);
+  }
+
+  ESP_LOGI("QUEUE_DEBUG",
+           "Message Type;Queue;C Time;Timestamp;Task ID;Ticks to wait");
+  unsigned int uiMessageIndex = 0;
+  while (uiMessageIndex < GLOBAL_QUEUE_MESSAGE_INDEX) {
+    QueueTraceData_Fix *currentMessage =
+        (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +
+                               uiMessageIndex *
+                                   GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);
+    ESP_LOGI("QUEUE_DEBUG", "%d;%d;%d;%d;%d;%d", currentMessage->messageType,
+             currentMessage->xQueue, currentMessage->c_time,
+             currentMessage->timeStamp, currentMessage->taskIdentifier,
+             currentMessage->xTicksToWait);
+    uiMessageIndex++;
+  }
+
+  ESP_LOGI("TICK_DEBUG", "C Time;Timestamp;New Tick Time;Task ID");
+  uiMessageIndex = 0;
+  while (uiMessageIndex < GLOBAL_TICK_MESSAGE_INDEX) {
+    TickTraceData_Fix *currentMessage =
+        (TickTraceData_Fix *)(GLOBAL_TICK_MESSAGE_BUFFER +
+                              uiMessageIndex *
+                                  GLOBAL_TICK_MESSAGE_ELEMENT_SIZE);
+    ESP_LOGI("TICK_DEBUG", "%d;%d;%d;%d", currentMessage->c_time,
+             currentMessage->timeStamp, currentMessage->newTickTime,
+             currentMessage->taskIdentifier);
+    uiMessageIndex++;
+  }
+
+  ESP_LOGI("TASK_DEBUG",
+           "Message Type;C Time;Timestamp;Task ID;Affected Task ID;Delay",
+           GLOBAL_TASK_MESSAGE_INDEX);
+  uiMessageIndex = 0;
+  while (uiMessageIndex < GLOBAL_TASK_MESSAGE_INDEX) {
+    TaskTraceData_Fix *currentMessage =
+        (TaskTraceData_Fix *)(GLOBAL_TASK_MESSAGE_BUFFER +
+                              uiMessageIndex *
+                                  GLOBAL_TASK_MESSAGE_ELEMENT_SIZE);
+    ESP_LOGI("TASK_DEBUG", "%d;%d;%d;%d;%d;%d", currentMessage->messageType,
+             currentMessage->c_time, currentMessage->timeStamp,
+             currentMessage->taskIdentifier, currentMessage->affectedTask,
+             currentMessage->delay);
+    uiMessageIndex++;
+  }
+
+  ESP_LOGI("FINISH_FLAG", "%x", ERROR_FLAG);
+  vTaskDelete(NULL);
+  while (true) {
+  }
+}
+
 extern "C" void app_main() {
+  while (GLOBAL_TASK_MESSAGE_BUFFER == 0) {
+    GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
+    GLOBAL_TASK_MESSAGE_BUFFER =
+        (char *)malloc(TASK_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
+    ESP_LOGI("MAIN", "Buffer created %d", GLOBAL_TASK_MESSAGE_BUFFER);
+  }
+
+  while (GLOBAL_QUEUE_MESSAGE_BUFFER == 0) {
+    GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE = sizeof(QueueTraceData_Fix);
+    GLOBAL_QUEUE_MESSAGE_BUFFER =
+        (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(QueueTraceData_Fix));
+    ESP_LOGI("MAIN", "Buffer created %d", GLOBAL_QUEUE_MESSAGE_BUFFER);
+  }
+
+  while (GLOBAL_TICK_MESSAGE_BUFFER == 0) {
+    GLOBAL_TICK_MESSAGE_ELEMENT_SIZE = sizeof(TickTraceData_Fix);
+    GLOBAL_TICK_MESSAGE_BUFFER =
+        (char *)malloc(TICK_MESSAGE_BUFFER_SIZE * sizeof(TickTraceData_Fix));
+    ESP_LOGI("MAIN", "Buffer created %d", GLOBAL_TICK_MESSAGE_BUFFER);
+  }
+
   xQueueHandle = xQueueCreate(10, sizeof(void *));
   if (xQueueHandle == nullptr) {
     // TODO: Queue was not created!
   }
 
+  // realTimeClock.begin();
+
+  // ESP_LOGI("app_main", "%s", realTimeClock.get());
+
+  xTaskCreate(debugPrintTask, "debugTask", 4096, NULL, configMAX_PRIORITIES - 1,
+              &MONITOR_TASK);
   /* Only priorities from 1-25 (configMAX_PRIORITIES) possible. */
   /* Initialize the display first. */
   xTaskCreate(initDisplay, "initDisplay", 4096, NULL, configMAX_PRIORITIES - 1,
@@ -196,13 +397,14 @@ extern "C" void app_main() {
   producer3Params->xQueueHandle = xQueueHandle;
   producer3Params->name = 'c';
 
-  xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer1Params, 1,
-              NULL);
-  xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer2Params, 1,
-              NULL);
-  xTaskCreate(producerTasks, "producerTask", 4096, (void *)producer3Params, 1,
-              NULL);
-  xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, NULL);
+  xTaskCreate(producerTasks, "producerTask1", 4096, (void *)producer1Params, 1,
+              (&taskList[0]));
+  xTaskCreate(producerTasks, "producerTask2", 4096, (void *)producer2Params, 1,
+              (&taskList[1]));
+  xTaskCreate(producerTasks, "producerTask3", 4096, (void *)producer3Params, 1,
+              (&taskList[2]));
+  xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, (&taskList[3]));
+
   // xTaskCreate(buttonWatch, "watch", 8192, NULL, 1, NULL);
   // xTaskCreate(clockCounter, "clock", 16384, NULL, 1, NULL);
 
