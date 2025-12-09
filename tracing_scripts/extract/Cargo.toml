@@ -1,0 +1,20 @@
+[package]
+name = "extract"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio-serial = { version = "5.4.5" }
+# serialport = { version = "4.8.1" }
+tokio-util = { version = "0.7", features = ["codec"] }
+bytes = { version = "1.6" }
+types = { path = "../types" }
+tokio = { version = "1.37", features = [
+  "rt",
+  "rt-multi-thread",
+  "io-util",
+  "macros",
+  "sync",
+  "time",
+] }
+csv = "1.4.0"
