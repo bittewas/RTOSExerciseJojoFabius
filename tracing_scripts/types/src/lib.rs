@@ -39,7 +39,10 @@ impl TryFrom<u32> for TaskEventType {
 pub struct TaskData {
     pub eventtype: TaskEventType,
     pub tick: u32,
+    pub timestamp: u32,
     pub taskid: u32,
+    pub affected_task_id: u32,
+    pub delay: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -86,8 +89,11 @@ impl TryFrom<u32> for QueueEventType {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct QueueData {
     pub eventtype: QueueEventType,
+    pub queue: u32,
     pub tick: u32,
+    pub timestamp: u32,
     pub taskid: u32,
+    pub ticks_to_wait: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -100,6 +106,8 @@ pub enum TickEventType {
 pub struct TickData {
     pub eventtype: TickEventType,
     pub tick: u32,
+    pub timestamp: u32,
+    pub new_tick_time: u32,
     pub taskid: u32,
 }
 
@@ -107,7 +115,10 @@ pub struct TickData {
 pub struct GeneralEventData {
     pub eventtype: String,
     pub tick: u32,
+    pub timestamp: u32,
     pub taskid: u32,
+    pub affected_object: u32,
+    pub delay: u32,
 }
 
 impl From<TickData> for GeneralEventData {
@@ -117,7 +128,10 @@ impl From<TickData> for GeneralEventData {
                 .unwrap()
                 .replace("\"", ""),
             tick: value.tick,
+            timestamp: value.timestamp,
             taskid: value.taskid,
+            affected_object: value.new_tick_time,
+            delay: value.new_tick_time - value.tick,
         }
     }
 }
@@ -129,7 +143,10 @@ impl From<QueueData> for GeneralEventData {
                 .unwrap()
                 .replace("\"", ""),
             tick: value.tick,
+            timestamp: value.timestamp,
             taskid: value.taskid,
+            affected_object: value.queue,
+            delay: value.ticks_to_wait,
         }
     }
 }
@@ -141,7 +158,10 @@ impl From<TaskData> for GeneralEventData {
                 .unwrap()
                 .replace("\"", ""),
             tick: value.tick,
+            timestamp: value.timestamp,
             taskid: value.taskid,
+            affected_object: value.affected_task_id,
+            delay: value.delay,
         }
     }
 }
@@ -151,7 +171,9 @@ pub fn test_tick_casting() {
     let tick_data = TickData {
         eventtype: TickEventType::IncrementTick,
         tick: 100,
+        timestamp: 1000,
         taskid: 1307,
+        new_tick_time: 101,
     };
 
     let general_event_data = GeneralEventData::from(tick_data);
@@ -166,7 +188,10 @@ pub fn test_task_casting() {
     let task_data = TaskData {
         eventtype: TaskEventType::Create,
         tick: 100,
+        timestamp: 100,
         taskid: 1307,
+        affected_task_id: 1308,
+        delay: 0,
     };
 
     let general_event_data = GeneralEventData::from(task_data);
@@ -180,8 +205,11 @@ pub fn test_task_casting() {
 pub fn test_queue_casting() {
     let queue_data = QueueData {
         eventtype: QueueEventType::Recieve,
+        queue: 50,
         tick: 100,
+        timestamp: 1000,
         taskid: 1307,
+        ticks_to_wait: 0,
     };
 
     let general_event_data = GeneralEventData::from(queue_data);
