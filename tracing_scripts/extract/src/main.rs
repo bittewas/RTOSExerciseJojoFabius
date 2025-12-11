@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::process::exit;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -52,8 +53,8 @@ impl Default for Config {
 impl Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "Config {{ port: {}, baud_rate: {}, output: {} }}",
-            self.port, self.baud_rate, self.output_file
+            "Config {{ port: {}, baud_rate: {}, output: {}, task_mapping_file: {} }}",
+            self.port, self.baud_rate, self.output_file, self.task_mapping_file
         ))
     }
 }
@@ -127,7 +128,7 @@ fn main() {
     writeln!(&mut mapping_file, "taskid,task_name").unwrap();
 
     let mut buffer: Vec<char> = vec![];
-    loop {
+    let return_value = loop {
         let mut buf = [0u8; 1];
         while port.read_exact(&mut buf).is_err() {}
 
@@ -141,7 +142,11 @@ fn main() {
                 match command {
                     "FINISH_FLAG" => {
                         println!("[Serial] RESULT WITH {}", value.trim());
-                        break;
+
+                        break value
+                            .trim()
+                            .parse::<i32>()
+                            .expect("Could not parse return value!");
                     }
                     "TASK_DEBUG" => match parse_task_line(value.trim()) {
                         Ok(data) => {
@@ -175,8 +180,10 @@ fn main() {
         } else if (buf[0] as char) != '\r' {
             buffer.push(buf[0] as char);
         }
-    }
+    };
     writer.flush().unwrap();
+
+    exit(return_value);
 }
 
 fn parse_queue_line(line: &str) -> Result<GeneralEventData, String> {
