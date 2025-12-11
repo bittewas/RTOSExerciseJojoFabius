@@ -30,6 +30,20 @@ Afterwards you may increase the tracing buffer size or decrease the tracing time
 
 Note: The export program may also crash on it's own if provided with wrong permissions/filenames and data. So please check the logs as well!
 
-## Visualisation tracing script
+## Visualisation tracing script (python provided one)
 
-For visualisation of the collected data we will provide two options. You may use the provided visualisation python script as well as `cargo run --bin visualize`.
+This is the provided visualization script with our additions to obtain some more feature.
+
+To run it first install the requirements listed in [requirements.txt](./requirements.txt).
+Afterwards you can run the script using `python visualization.py`.
+You may add the `-c` flag to use CPU cycle count instead of tick count as time value.
+
+For the former we added visualization of queue send and receive events. The first is indicated by a bar with a down arrow with a dot instead of a head and the later by a up arrow with a dot instead of a head. Different queues are displayed in different colors.
+
+Additionally we provide task delay markers by displaying the delay value with a black up arrow, when the task should continue execution.
+
+As some of our tasks had execution times smaller than a tick before being switched out again we modified the visualization such that even those tasks are displayed for a full tick instead of not being displayed. As this is not ideal we also provide the possibility to simply switch out the tick with the CPU cycle count. This can be done by providing `-c` as argument to the script.
+
+## Visualisation tracing script (Rust self build one)
+
+TODO!

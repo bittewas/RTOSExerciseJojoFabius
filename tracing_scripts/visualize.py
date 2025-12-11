@@ -3,7 +3,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import re
 import seaborn as sns
+import sys
 from typing import List, Tuple, Dict, Optional
+
+tick_name = "tick"
 
 
 def load_data(csv_file_path: str) -> Optional[pd.DataFrame]:
@@ -24,9 +27,9 @@ def load_data(csv_file_path: str) -> Optional[pd.DataFrame]:
         return None
 
     # Ensure 'tick' is numeric
-    df["tick"] = pd.to_numeric(df["tick"], errors="coerce")
-    df.dropna(subset=["tick"], inplace=True)
-    df["tick"] = df["tick"].astype(int)
+    df[tick_name] = pd.to_numeric(df[tick_name], errors="coerce")
+    df.dropna(subset=[tick_name], inplace=True)
+    df[tick_name] = df[tick_name].astype(int)
 
     return df
 
@@ -37,6 +40,7 @@ def get_task_segments(
     Dict[str, List[Tuple[int, int]]],
     int,
     List[str],
+    List[int],
     Dict[str, List[int]],
     Dict[str, List[Tuple[int, int]]],
     Dict[str, List[Tuple[int, int]]],
@@ -49,6 +53,16 @@ def get_task_segments(
     except ValueError:
         task_ids = sorted(df["task_name"].dropna().unique())
 
+    qdfr = df.loc[(df["eventtype"] == "traceQUEUE_RECEIVE")]
+    qdfs = df.loc[(df["eventtype"] == "traceQUEUE_SEND")]
+    qdf = pd.concat([qdfr, qdfs], ignore_index=True)
+    try:
+        queue_ids = sorted(
+            qdf["affected_object"].dropna().unique(),
+            key=lambda x: int(re.sub(r"\D", "", str(x))),
+        )
+    except ValueError:
+        queue_ids = sorted(qdf["affected_object"].dropna().unique())
     if not task_ids:
         return {}, 0, [], {}, {}, {}
 
@@ -59,31 +73,26 @@ def get_task_segments(
     queue_write_segments = {}
 
     for task_id in task_ids:
-        task_df = df[df["task_name"] == task_id].sort_values("tick")
+        task_df = df[df["task_name"] == task_id].sort_values(tick_name)
 
         switched_in_ticks = task_df.loc[
-            task_df["eventtype"] == "traceTASK_SWITCHED_IN", "tick"
+            task_df["eventtype"] == "traceTASK_SWITCHED_IN", tick_name
         ].tolist()
         switched_out_ticks = task_df.loc[
-            task_df["eventtype"] == "traceTASK_SWITCHED_OUT", "tick"
+            task_df["eventtype"] == "traceTASK_SWITCHED_OUT", tick_name
         ].tolist()
         # delay_ticks = task_df.loc[task_df['eventtype'] == 'traceTASK_DELAY', 'tick'].tolist()
         delay_segments[task_id] = task_df.loc[
-            task_df["eventtype"] == "traceTASK_DELAY_UNTIL", "tick"
+            task_df["eventtype"] == "traceTASK_DELAY_UNTIL", tick_name
         ].tolist()
-        print(task_df)
-        queue_read_segments[task_id] = task_df.loc[
-            task_df["eventtype"] == "traceQUEUE_RECEIVE", ["tick", "affected_object"]
-        ]
 
-        print(queue_read_segments)
-        queue_write_segments[task_id] = task_df.loc[
-            [
-                task_df["eventtype"] == "traceQUEUE_SEND",
-                task_df["eventtype"] == "traceQUEUE_SEND",
-            ],
-            ["tick", "affected_object"],
-        ].tolist()
+        qrb = task_df.loc[task_df["eventtype"] == "traceQUEUE_RECEIVE"]
+        queue_read_segments[task_id] = list(zip(qrb[tick_name], qrb["affected_object"]))
+
+        qrb = task_df.loc[task_df["eventtype"] == "traceQUEUE_SEND"]
+        queue_write_segments[task_id] = list(
+            zip(qrb[tick_name], qrb["affected_object"])
+        )
 
         segments = []
         in_idx = 0
@@ -116,7 +125,7 @@ def get_task_segments(
                     out_idx += 1
                 else:
                     # last event is IN
-                    last_known_tick = df["tick"].max()
+                    last_known_tick = df[tick_name].max()
                     if last_known_tick > in_tick:
                         segments.append((in_tick, last_known_tick))
                     break
@@ -128,13 +137,14 @@ def get_task_segments(
             task_segments[task_id] = segments
         elif not task_df.empty:
             # Handle task with no segments but has events (updates max_tick)
-            max_tick = max(max_tick, task_df["tick"].max())
+            max_tick = max(max_tick, task_df[tick_name].max())
             task_segments[task_id] = []
 
     return (
         task_segments,
         max_tick,
         task_ids,
+        queue_ids,
         delay_segments,
         queue_read_segments,
         queue_write_segments,
@@ -174,6 +184,7 @@ def calculate_x_ticks(max_tick: int) -> np.ndarray:
 def plot_task_schedule(
     task_segments: Dict[str, List[Tuple[int, int]]],
     task_ids: List[str],
+    queue_ids: List[int],
     max_tick: int,
     delay_segments: Dict[str, List[int]],
     queue_read_segments: Dict[str, List[Tuple[int, int]]],
@@ -185,6 +196,7 @@ def plot_task_schedule(
     y_height = 0.7
     y_spacing = 0.5
     palette = sns.color_palette("muted", n_colors=len(task_ids))
+    queue_palette = sns.color_palette("muted", n_colors=len(queue_ids))
 
     y_base_positions = {
         task_id: i * (y_height + y_spacing) for i, task_id in enumerate(task_ids)
@@ -231,37 +243,39 @@ def plot_task_schedule(
                 color="black",
             )
         for read_time, queue_handle in queue_read_segments.get(task_id, []):
+            qcolor = queue_palette[queue_ids.index(queue_handle) % len(queue_palette)]
             ax.annotate(
                 "",
                 xytext=(read_time, y_pos - y_height / 2),
-                xy=(read_time, y_pos + y_height / 2),
+                xy=(read_time, y_pos + y_height / 2 + 0.05),
                 arrowprops=dict(
-                    arrowstyle="-", color="black", lw=1.0, shrinkA=0, shrinkB=0
+                    arrowstyle="-", color=qcolor, lw=1.0, shrinkA=0, shrinkB=0
                 ),
-                color="black",
+                color=qcolor,
             )
             ax.plot(
-                (read_time - 0.01),
-                (y_pos + y_height / 2),
+                (read_time),
+                (y_pos + y_height / 2 + 0.05),
                 "o",
-                color="black",
+                color=qcolor,
                 markersize=5,
             )
         for read_time, queue_handle in queue_write_segments.get(task_id, []):
+            qcolor = queue_palette[queue_ids.index(queue_handle) % len(queue_palette)]
             ax.annotate(
                 "",
-                xytext=(read_time, y_pos - y_height / 2),
+                xytext=(read_time, y_pos - y_height / 2 - 0.05),
                 xy=(read_time, y_pos + y_height / 2),
                 arrowprops=dict(
-                    arrowstyle="-", color="black", lw=1.0, shrinkA=0, shrinkB=0
+                    arrowstyle="-", color=qcolor, lw=1.0, shrinkA=0, shrinkB=0
                 ),
-                color="black",
+                color=qcolor,
             )
             ax.plot(
-                (read_time - 0.01),
-                (y_pos - y_height / 2),
+                (read_time),
+                (y_pos - y_height / 2 - 0.05),
                 "o",
-                color="black",
+                color=qcolor,
                 markersize=5,
             )
 
@@ -320,6 +334,9 @@ def plot_task_schedule(
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "-c":
+        tick_name = "timestamp"
+
     # load csv
     df = load_data("log_entries.csv")
     if df is None:
@@ -330,6 +347,7 @@ if __name__ == "__main__":
         task_segments,
         max_tick,
         task_ids,
+        queue_ids,
         delay_segments,
         queue_read_segments,
         queue_write_segments,
@@ -341,6 +359,7 @@ if __name__ == "__main__":
     plot_task_schedule(
         task_segments,
         task_ids,
+        queue_ids,
         max_tick,
         delay_segments,
         queue_read_segments,
