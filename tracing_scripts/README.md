@@ -11,7 +11,7 @@ To get the tracing data from the watch you can simply run `cargo run --bin extra
 Our script will automatically use the first serial device it can find and try to talk to it.
 If your setup has multiple devices and we did not choose the correct one automatically you can provide it using command flags
 
-```rust
+```sh
 cargo run --bin extract -- -p serial_port_to_use -b baud_rate -o output_file_location -m task_name_mapping_file_location
 ```
 

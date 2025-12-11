@@ -35,7 +35,7 @@ impl TryFrom<u32> for TaskEventType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TaskData {
     pub eventtype: TaskEventType,
     pub tick: u32,
@@ -43,6 +43,7 @@ pub struct TaskData {
     pub taskid: u32,
     pub affected_task_id: u32,
     pub delay: u32,
+    pub task_name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -86,7 +87,7 @@ impl TryFrom<u32> for QueueEventType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QueueData {
     pub eventtype: QueueEventType,
     pub queue: u32,
@@ -94,6 +95,7 @@ pub struct QueueData {
     pub timestamp: u32,
     pub taskid: u32,
     pub ticks_to_wait: u32,
+    pub task_name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -102,13 +104,14 @@ pub enum TickEventType {
     IncrementTick,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TickData {
     pub eventtype: TickEventType,
     pub tick: u32,
     pub timestamp: u32,
     pub new_tick_time: u32,
     pub taskid: u32,
+    pub task_name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -119,6 +122,7 @@ pub struct GeneralEventData {
     pub taskid: u32,
     pub affected_object: u32,
     pub delay: u32,
+    pub task_name: String,
 }
 
 impl From<TickData> for GeneralEventData {
@@ -132,6 +136,7 @@ impl From<TickData> for GeneralEventData {
             taskid: value.taskid,
             affected_object: value.new_tick_time,
             delay: value.new_tick_time - value.tick,
+            task_name: value.task_name,
         }
     }
 }
@@ -147,6 +152,7 @@ impl From<QueueData> for GeneralEventData {
             taskid: value.taskid,
             affected_object: value.queue,
             delay: value.ticks_to_wait,
+            task_name: value.task_name,
         }
     }
 }
@@ -162,6 +168,7 @@ impl From<TaskData> for GeneralEventData {
             taskid: value.taskid,
             affected_object: value.affected_task_id,
             delay: value.delay,
+            task_name: value.task_name,
         }
     }
 }
@@ -174,13 +181,15 @@ pub fn test_tick_casting() {
         timestamp: 1000,
         taskid: 1307,
         new_tick_time: 101,
+        task_name: "Blas".to_string(),
     };
 
-    let general_event_data = GeneralEventData::from(tick_data);
+    let general_event_data = GeneralEventData::from(tick_data.clone());
 
     assert_eq!(general_event_data.eventtype, "traceTASK_INCREMENT_TICK");
     assert_eq!(general_event_data.tick, tick_data.tick);
     assert_eq!(general_event_data.taskid, tick_data.taskid);
+    assert_eq!(general_event_data.task_name, "Blas".to_string());
 }
 
 #[test]
@@ -192,9 +201,10 @@ pub fn test_task_casting() {
         taskid: 1307,
         affected_task_id: 1308,
         delay: 0,
+        task_name: "Blos".to_string(),
     };
 
-    let general_event_data = GeneralEventData::from(task_data);
+    let general_event_data = GeneralEventData::from(task_data.clone());
 
     assert_eq!(general_event_data.eventtype, "traceTASK_CREATE");
     assert_eq!(general_event_data.tick, task_data.tick);
@@ -210,9 +220,10 @@ pub fn test_queue_casting() {
         timestamp: 1000,
         taskid: 1307,
         ticks_to_wait: 0,
+        task_name: "TESTING".to_string(),
     };
 
-    let general_event_data = GeneralEventData::from(queue_data);
+    let general_event_data = GeneralEventData::from(queue_data.clone());
 
     assert_eq!(general_event_data.eventtype, "traceQUEUE_RECEIVE");
     assert_eq!(general_event_data.tick, queue_data.tick);

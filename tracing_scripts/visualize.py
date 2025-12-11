@@ -24,33 +24,66 @@ def load_data(csv_file_path: str) -> Optional[pd.DataFrame]:
         return None
 
     # Ensure 'tick' is numeric
-    df['tick'] = pd.to_numeric(df['tick'], errors='coerce')
-    df.dropna(subset=['tick'], inplace=True)
-    df['tick'] = df['tick'].astype(int)
+    df["tick"] = pd.to_numeric(df["tick"], errors="coerce")
+    df.dropna(subset=["tick"], inplace=True)
+    df["tick"] = df["tick"].astype(int)
 
     return df
 
 
-def get_task_segments(df: pd.DataFrame) -> Tuple[Dict[str, List[Tuple[int, int]]], int, List[str]]:
+def get_task_segments(
+    df: pd.DataFrame,
+) -> Tuple[
+    Dict[str, List[Tuple[int, int]]],
+    int,
+    List[str],
+    Dict[str, List[int]],
+    Dict[str, List[Tuple[int, int]]],
+    Dict[str, List[Tuple[int, int]]],
+]:
     try:
         task_ids = sorted(
-            df['taskid'].dropna().unique(),
-            key=lambda x: int(re.sub(r'\D', '', str(x)))
+            df["task_name"].dropna().unique(),
+            key=lambda x: int(re.sub(r"\D", "", str(x))),
         )
     except ValueError:
-        task_ids = sorted(df['taskid'].dropna().unique())
+        task_ids = sorted(df["task_name"].dropna().unique())
 
     if not task_ids:
-        return {}, 0, []
+        return {}, 0, [], {}, {}, {}
 
     task_segments = {}
     max_tick = 0
+    delay_segments = {}
+    queue_read_segments = {}
+    queue_write_segments = {}
 
     for task_id in task_ids:
-        task_df = df[df['taskid'] == task_id].sort_values('tick')
+        task_df = df[df["task_name"] == task_id].sort_values("tick")
 
-        switched_in_ticks = task_df.loc[task_df['eventtype'] == 'traceTASK_SWITCHED_IN', 'tick'].tolist()
-        switched_out_ticks = task_df.loc[task_df['eventtype'] == 'traceTASK_SWITCHED_OUT', 'tick'].tolist()
+        switched_in_ticks = task_df.loc[
+            task_df["eventtype"] == "traceTASK_SWITCHED_IN", "tick"
+        ].tolist()
+        switched_out_ticks = task_df.loc[
+            task_df["eventtype"] == "traceTASK_SWITCHED_OUT", "tick"
+        ].tolist()
+        # delay_ticks = task_df.loc[task_df['eventtype'] == 'traceTASK_DELAY', 'tick'].tolist()
+        delay_segments[task_id] = task_df.loc[
+            task_df["eventtype"] == "traceTASK_DELAY_UNTIL", "tick"
+        ].tolist()
+        print(task_df)
+        queue_read_segments[task_id] = task_df.loc[
+            task_df["eventtype"] == "traceQUEUE_RECEIVE", ["tick", "affected_object"]
+        ]
+
+        print(queue_read_segments)
+        queue_write_segments[task_id] = task_df.loc[
+            [
+                task_df["eventtype"] == "traceQUEUE_SEND",
+                task_df["eventtype"] == "traceQUEUE_SEND",
+            ],
+            ["tick", "affected_object"],
+        ].tolist()
 
         segments = []
         in_idx = 0
@@ -60,21 +93,33 @@ def get_task_segments(df: pd.DataFrame) -> Tuple[Dict[str, List[Tuple[int, int]]
         while in_idx < len(switched_in_ticks):
             in_tick = switched_in_ticks[in_idx]
 
-            # next switched out event
-            while out_idx < len(switched_out_ticks) and switched_out_ticks[out_idx] <= in_tick:
-                out_idx += 1
-
-            if out_idx < len(switched_out_ticks):
-                out_tick = switched_out_ticks[out_idx]
+            if (
+                out_idx < len(switched_out_ticks)
+                and switched_out_ticks[out_idx] == in_tick
+            ):
+                out_tick = switched_out_ticks[out_idx] + 1
                 segments.append((in_tick, out_tick))
                 in_idx += 1
                 out_idx += 1
             else:
-                # last event is IN
-                last_known_tick = df['tick'].max()
-                if last_known_tick > in_tick:
-                    segments.append((in_tick, last_known_tick))
-                break
+                # next switched out event
+                while (
+                    out_idx < len(switched_out_ticks)
+                    and switched_out_ticks[out_idx] <= in_tick
+                ):
+                    out_idx += 1
+
+                if out_idx < len(switched_out_ticks):
+                    out_tick = switched_out_ticks[out_idx]
+                    segments.append((in_tick, out_tick))
+                    in_idx += 1
+                    out_idx += 1
+                else:
+                    # last event is IN
+                    last_known_tick = df["tick"].max()
+                    if last_known_tick > in_tick:
+                        segments.append((in_tick, last_known_tick))
+                    break
 
         if segments:
             # Find the max tick for this task and update overall max_tick
@@ -83,10 +128,17 @@ def get_task_segments(df: pd.DataFrame) -> Tuple[Dict[str, List[Tuple[int, int]]
             task_segments[task_id] = segments
         elif not task_df.empty:
             # Handle task with no segments but has events (updates max_tick)
-            max_tick = max(max_tick, task_df['tick'].max())
+            max_tick = max(max_tick, task_df["tick"].max())
             task_segments[task_id] = []
 
-    return task_segments, max_tick, task_ids
+    return (
+        task_segments,
+        max_tick,
+        task_ids,
+        delay_segments,
+        queue_read_segments,
+        queue_write_segments,
+    )
 
 
 def calculate_x_ticks(max_tick: int) -> np.ndarray:
@@ -99,7 +151,7 @@ def calculate_x_ticks(max_tick: int) -> np.ndarray:
 
     if tick_step > 1:
         # Round to 1, 2, 5, 10, 20, 50...
-        power_of_ten = 10**np.floor(np.log10(tick_step))
+        power_of_ten = 10 ** np.floor(np.log10(tick_step))
         if power_of_ten == 0:
             power_of_ten = 1
 
@@ -119,18 +171,27 @@ def calculate_x_ticks(max_tick: int) -> np.ndarray:
     return np.arange(0, max_tick + tick_step, tick_step)
 
 
-def plot_task_schedule(task_segments: Dict[str, List[Tuple[int, int]]],
-                       task_ids: List[str],
-                       max_tick: int,
-                       output_image_name: str):
+def plot_task_schedule(
+    task_segments: Dict[str, List[Tuple[int, int]]],
+    task_ids: List[str],
+    max_tick: int,
+    delay_segments: Dict[str, List[int]],
+    queue_read_segments: Dict[str, List[Tuple[int, int]]],
+    queue_write_segments: Dict[str, List[Tuple[int, int]]],
+    output_image_name: str,
+):
     sns.set_theme(style="white", palette="muted")
 
     y_height = 0.7
     y_spacing = 0.5
     palette = sns.color_palette("muted", n_colors=len(task_ids))
 
-    y_base_positions = {task_id: i * (y_height + y_spacing) for i, task_id in enumerate(task_ids)}
-    y_center_positions = {task_id: base + y_height / 2 for task_id, base in y_base_positions.items()}
+    y_base_positions = {
+        task_id: i * (y_height + y_spacing) for i, task_id in enumerate(task_ids)
+    }
+    y_center_positions = {
+        task_id: base + y_height / 2 for task_id, base in y_base_positions.items()
+    }
 
     fig, ax = plt.subplots(figsize=(15, len(task_ids) * 1.0 + 1))
 
@@ -142,34 +203,84 @@ def plot_task_schedule(task_segments: Dict[str, List[Tuple[int, int]]],
 
         # horizontal baseline
         if i > 0:
-            ax.axhline(y=y_base, color='grey', linewidth=0.6, zorder=0, alpha=0.8)
+            ax.axhline(y=y_base, color="grey", linewidth=0.6, zorder=0, alpha=0.8)
 
         # job execution segments
         for start, end in task_segments.get(task_id, []):
             if end > start:
-                ax.barh(y=y_pos, width=end - start, left=start, height=y_height,
-                        align='center',
-                        color=bar_color,
-                        edgecolor=bar_color,
-                        linewidth=0.5,
-                        zorder=2)
+                ax.barh(
+                    y=y_pos,
+                    width=end - start,
+                    left=start,
+                    height=y_height,
+                    align="center",
+                    color=bar_color,
+                    edgecolor=bar_color,
+                    linewidth=0.5,
+                    zorder=2,
+                )
+
+        for delayed_until in delay_segments.get(task_id, []):
+            ax.annotate(
+                "",
+                xytext=(delayed_until, y_pos - y_height / 2),
+                xy=(delayed_until, y_pos + y_height / 2 + 0.1),
+                arrowprops=dict(
+                    arrowstyle="-|>", color="black", lw=1.0, shrinkA=0, shrinkB=0
+                ),
+                color="black",
+            )
+        for read_time, queue_handle in queue_read_segments.get(task_id, []):
+            ax.annotate(
+                "",
+                xytext=(read_time, y_pos - y_height / 2),
+                xy=(read_time, y_pos + y_height / 2),
+                arrowprops=dict(
+                    arrowstyle="-", color="black", lw=1.0, shrinkA=0, shrinkB=0
+                ),
+                color="black",
+            )
+            ax.plot(
+                (read_time - 0.01),
+                (y_pos + y_height / 2),
+                "o",
+                color="black",
+                markersize=5,
+            )
+        for read_time, queue_handle in queue_write_segments.get(task_id, []):
+            ax.annotate(
+                "",
+                xytext=(read_time, y_pos - y_height / 2),
+                xy=(read_time, y_pos + y_height / 2),
+                arrowprops=dict(
+                    arrowstyle="-", color="black", lw=1.0, shrinkA=0, shrinkB=0
+                ),
+                color="black",
+            )
+            ax.plot(
+                (read_time - 0.01),
+                (y_pos - y_height / 2),
+                "o",
+                color="black",
+                markersize=5,
+            )
 
     # Y-Axis
     labels = [str(task_id) for task_id in task_ids]
     ax.set_yticks(list(y_center_positions.values()))
     ax.set_yticklabels(labels, fontsize=12)
-    ax.tick_params(axis='y', length=0)
+    ax.tick_params(axis="y", length=0)
 
     # X-Axis
     x_ticks = calculate_x_ticks(max_tick)
     ax.set_xticks(x_ticks)
     ax.set_xticklabels([str(int(t)) for t in x_ticks], fontsize=12, color="black")
-    ax.tick_params(axis='x', direction='out', length=6, width=1, colors='grey')
+    ax.tick_params(axis="x", direction="out", length=6, width=1, colors="grey")
 
     sns.despine(left=True, bottom=False, right=True, top=True)
-    ax.spines['bottom'].set_linewidth(0.8)
-    ax.spines['bottom'].set_color('black')
-    ax.spines['bottom'].set_position(('data', 0))
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.spines["bottom"].set_color("black")
+    ax.spines["bottom"].set_position(("data", 0))
 
     if max_tick > 0:
         ax.set_xlim(0, max_tick * 1.02)
@@ -186,12 +297,21 @@ def plot_task_schedule(task_segments: Dict[str, List[Tuple[int, int]]],
     # Vertical Grid Lines
     for tick in x_ticks:
         if tick > 0:
-            ax.vlines(x=tick, ymin=0, ymax=final_y_top,
-                      color='grey', linestyle='--', alpha=0.5, linewidth=0.7,
-                      zorder=1)
+            ax.vlines(
+                x=tick,
+                ymin=0,
+                ymax=final_y_top,
+                color="grey",
+                linestyle="--",
+                alpha=0.5,
+                linewidth=0.7,
+                zorder=1,
+            )
 
-    ax.set_xlabel('Tick Count', fontsize=14, color="black")
-    ax.set_title('Task Schedule Diagram', fontsize=16, pad=20, weight='bold', color="black")
+    ax.set_xlabel("Tick Count", fontsize=14, color="black")
+    ax.set_title(
+        "Task Schedule Diagram", fontsize=16, pad=20, weight="bold", color="black"
+    )
 
     plt.tight_layout()
     plt.savefig(output_image_name)
@@ -206,9 +326,24 @@ if __name__ == "__main__":
         raise Exception("Failed to load data from CSV.")
 
     # postprocess log entries
-    task_segments, max_tick, task_ids = get_task_segments(df)
+    (
+        task_segments,
+        max_tick,
+        task_ids,
+        delay_segments,
+        queue_read_segments,
+        queue_write_segments,
+    ) = get_task_segments(df)
     if not task_ids:
         raise Exception("No valid task IDs found in the data.")
 
     # create plot
-    plot_task_schedule(task_segments, task_ids, max_tick, "task_schedule.pdf")
+    plot_task_schedule(
+        task_segments,
+        task_ids,
+        max_tick,
+        delay_segments,
+        queue_read_segments,
+        queue_write_segments,
+        "task_schedule.pdf",
+    )

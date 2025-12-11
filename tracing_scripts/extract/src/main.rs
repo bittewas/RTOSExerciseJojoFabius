@@ -114,7 +114,7 @@ fn main() {
     port.write_request_to_send(true).unwrap();
     port.write_data_terminal_ready(false).unwrap();
 
-    sleep(Duration::from_millis(1000));
+    sleep(Duration::from_millis(100));
 
     port.write_request_to_send(false).unwrap();
     port.write_data_terminal_ready(false).unwrap();
@@ -189,7 +189,7 @@ fn main() {
 fn parse_queue_line(line: &str) -> Result<GeneralEventData, String> {
     let data = line.split(";").collect::<Vec<&str>>();
 
-    if data.len() != 6 {
+    if data.len() != 7 {
         return Err("Wrong format!".to_string());
     }
 
@@ -206,6 +206,7 @@ fn parse_queue_line(line: &str) -> Result<GeneralEventData, String> {
         timestamp: data[3].trim().parse().map_err(|_| "".to_string())?,
         taskid: data[4].trim().parse().map_err(|_| "".to_string())?,
         ticks_to_wait: data[5].trim().parse().map_err(|_| "".to_string())?,
+        task_name: data[6].trim().to_string(),
     };
 
     Ok(GeneralEventData::from(queue_data))
@@ -214,7 +215,7 @@ fn parse_queue_line(line: &str) -> Result<GeneralEventData, String> {
 fn parse_tick_line(line: &str) -> Result<GeneralEventData, String> {
     let data = line.split(";").collect::<Vec<&str>>();
 
-    if data.len() != 4 {
+    if data.len() != 5 {
         return Err("Wrong format!".to_string());
     }
 
@@ -228,6 +229,7 @@ fn parse_tick_line(line: &str) -> Result<GeneralEventData, String> {
         timestamp: data[1].trim().parse().map_err(|_| "".to_string())?,
         new_tick_time: data[2].trim().parse().map_err(|_| "".to_string())?,
         taskid: data[3].trim().parse().map_err(|_| "".to_string())?,
+        task_name: data[4].trim().to_string(),
     };
 
     Ok(GeneralEventData::from(queue_data))
@@ -236,7 +238,7 @@ fn parse_tick_line(line: &str) -> Result<GeneralEventData, String> {
 fn parse_task_line(line: &str) -> Result<GeneralEventData, String> {
     let data = line.split(";").collect::<Vec<&str>>();
 
-    if data.len() != 6 {
+    if data.len() != 7 {
         return Err("Wrong format!".to_string());
     }
 
@@ -264,6 +266,7 @@ fn parse_task_line(line: &str) -> Result<GeneralEventData, String> {
             delay: data[5].trim().parse().map_err(|err| {
                 format!("(Task) Failed to parse delay. Reason: {}", err).to_string()
             })?,
+            task_name: data[6].trim().to_string(),
         };
 
     Ok(GeneralEventData::from(task_data))
