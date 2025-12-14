@@ -44,8 +44,7 @@ const unsigned int TICK_MESSAGE_BUFFER_SIZE = 1010;
 const unsigned int TASK_MESSAGE_BUFFER_SIZE = 200;
 
 unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
-unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE =
-    sizeof(QueueTraceData_Fix);
+unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE = sizeof(QueueTraceData_Fix);
 char *GLOBAL_QUEUE_MESSAGE_BUFFER =
     (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(QueueTraceData_Fix));
 
@@ -57,8 +56,7 @@ typedef struct __attribute__((__packed__)) TickTraceData {
 } TickTraceData_Fix;
 
 unsigned int GLOBAL_TICK_MESSAGE_INDEX;
-unsigned int GLOBAL_TICK_MESSAGE_ELEMENT_SIZE =
-    sizeof(TickTraceData_Fix);
+unsigned int GLOBAL_TICK_MESSAGE_ELEMENT_SIZE = sizeof(TickTraceData_Fix);
 char *GLOBAL_TICK_MESSAGE_BUFFER =
     (char *)malloc(TICK_MESSAGE_BUFFER_SIZE * sizeof(TickTraceData_Fix));
 
@@ -82,7 +80,6 @@ TaskHandle_t MONITOR_TASK = 0;
 
 GxEPD2_BW<WatchyDisplay, WatchyDisplay::HEIGHT> display(WatchyDisplay{});
 QueueHandle_t xQueueHandle;
-DS3232RTC realTimeClock(Wire);
 
 uint32_t getCurrentSystemTimeFromWatchy() {
   return (uint32_t)esp_cpu_get_cycle_count();
@@ -94,8 +91,9 @@ char *getAndIncrementCurrentQueueMessageBuffer() {
     GLOBAL_QUEUE_MESSAGE_BUFFER =
         (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
   }
-  char *position = GLOBAL_QUEUE_MESSAGE_BUFFER +
-                   GLOBAL_QUEUE_MESSAGE_INDEX * GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;
+  char *position =
+      GLOBAL_QUEUE_MESSAGE_BUFFER +
+      GLOBAL_QUEUE_MESSAGE_INDEX * GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE;
   GLOBAL_QUEUE_MESSAGE_INDEX += 1;
   if (GLOBAL_QUEUE_MESSAGE_INDEX >= QUEUE_MESSAGE_BUFFER_SIZE) {
     GLOBAL_QUEUE_MESSAGE_INDEX = QUEUE_MESSAGE_BUFFER_SIZE - 1;
@@ -124,7 +122,7 @@ char *getAndIncrementCurrentTaskMessageBuffer() {
   if (GLOBAL_TASK_MESSAGE_BUFFER == 0) {
     GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
     GLOBAL_TASK_MESSAGE_BUFFER =
-        (char *)malloc(TASK_MESSAGE_BUFFER_SIZE* sizeof(TaskTraceData_Fix));
+        (char *)malloc(TASK_MESSAGE_BUFFER_SIZE * sizeof(TaskTraceData_Fix));
   }
   char *position = GLOBAL_TASK_MESSAGE_BUFFER +
                    GLOBAL_TASK_MESSAGE_INDEX * GLOBAL_TASK_MESSAGE_ELEMENT_SIZE;
@@ -293,47 +291,52 @@ void debugPrintTask(void *pvParameters) {
       vTaskDelete(taskList[i]);
   }
 
-  ESP_LOGI("QUEUE_DEBUG",
-           "Message Type;Queue;C Time;Timestamp;Task ID;Ticks to wait");
+  ESP_LOGI(
+      "QUEUE_DEBUG",
+      "Message Type;Queue;C Time;Timestamp;Task ID;Ticks to wait;Task Name");
   unsigned int uiMessageIndex = 0;
   while (uiMessageIndex < GLOBAL_QUEUE_MESSAGE_INDEX) {
     QueueTraceData_Fix *currentMessage =
         (QueueTraceData_Fix *)(GLOBAL_QUEUE_MESSAGE_BUFFER +
                                uiMessageIndex *
                                    GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE);
-    ESP_LOGI("QUEUE_DEBUG", "%d;%d;%d;%d;%d;%d", currentMessage->messageType,
+    ESP_LOGI("QUEUE_DEBUG", "%d;%d;%d;%d;%d;%d;%s", currentMessage->messageType,
              currentMessage->xQueue, currentMessage->c_time,
              currentMessage->timeStamp, currentMessage->taskIdentifier,
-             currentMessage->xTicksToWait);
+             currentMessage->xTicksToWait,
+             pcTaskGetName(currentMessage->taskIdentifier));
     uiMessageIndex++;
   }
 
-  ESP_LOGI("TICK_DEBUG", "C Time;Timestamp;New Tick Time;Task ID");
+  ESP_LOGI("TICK_DEBUG", "C Time;Timestamp;New Tick Time;Task ID;Task Name");
   uiMessageIndex = 0;
   while (uiMessageIndex < GLOBAL_TICK_MESSAGE_INDEX) {
     TickTraceData_Fix *currentMessage =
         (TickTraceData_Fix *)(GLOBAL_TICK_MESSAGE_BUFFER +
                               uiMessageIndex *
                                   GLOBAL_TICK_MESSAGE_ELEMENT_SIZE);
-    ESP_LOGI("TICK_DEBUG", "%d;%d;%d;%d", currentMessage->c_time,
+    ESP_LOGI("TICK_DEBUG", "%d;%d;%d;%d;%s", currentMessage->c_time,
              currentMessage->timeStamp, currentMessage->newTickTime,
-             currentMessage->taskIdentifier);
+             currentMessage->taskIdentifier,
+             pcTaskGetName(currentMessage->taskIdentifier));
     uiMessageIndex++;
   }
 
-  ESP_LOGI("TASK_DEBUG",
-           "Message Type;C Time;Timestamp;Task ID;Affected Task ID;Delay",
-           GLOBAL_TASK_MESSAGE_INDEX);
+  ESP_LOGI(
+      "TASK_DEBUG",
+      "Message Type;C Time;Timestamp;Task ID;Affected Task ID;Delay;Task Name",
+      GLOBAL_TASK_MESSAGE_INDEX);
   uiMessageIndex = 0;
   while (uiMessageIndex < GLOBAL_TASK_MESSAGE_INDEX) {
     TaskTraceData_Fix *currentMessage =
         (TaskTraceData_Fix *)(GLOBAL_TASK_MESSAGE_BUFFER +
                               uiMessageIndex *
                                   GLOBAL_TASK_MESSAGE_ELEMENT_SIZE);
-    ESP_LOGI("TASK_DEBUG", "%d;%d;%d;%d;%d;%d", currentMessage->messageType,
+    ESP_LOGI("TASK_DEBUG", "%d;%d;%d;%d;%d;%d;%s", currentMessage->messageType,
              currentMessage->c_time, currentMessage->timeStamp,
              currentMessage->taskIdentifier, currentMessage->affectedTask,
-             currentMessage->delay);
+             currentMessage->delay,
+             pcTaskGetName(currentMessage->taskIdentifier));
     uiMessageIndex++;
   }
 
