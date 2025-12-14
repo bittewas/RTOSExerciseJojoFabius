@@ -4,6 +4,12 @@ This part of the project takes care of the visualisation and export of the traci
 
 To correctly debug the actual version you first need to flash the version to use for debugging to your clock.
 
+## Requirements
+
+For our export script we use rust, so you need to install `cargo` to run our export script.
+
+You can either use your systems package installation tool (`apt install cargo`, etc.) or you can refer to `https://rust-lang.org/tools/install/`.
+
 ## Export tracing data
 
 To get the tracing data from the watch you can simply run `cargo run --bin extract` in this folder.
