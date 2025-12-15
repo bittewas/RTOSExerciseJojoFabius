@@ -1,8 +1,8 @@
 use std::{collections::HashMap, io, path::PathBuf};
 
 use clap::Parser;
-use egui::Color32;
-use egui_plot::Plot;
+use egui::{Color32, Stroke};
+use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints, Points, Polygon};
 use palette::{rgb::Rgb, FromColor, IntoColor, RgbHue};
 use types::GeneralEventData;
 
@@ -19,6 +19,25 @@ fn main() -> io::Result<()> {
 
     let (task_segments, max_tick, task_ids) = get_task_segments(&events);
 
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_decorations(false)
+            .with_resizable(true)
+            .with_inner_size((1200.0, 800.0)),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "Task Schedule Diagram",
+        options,
+        Box::new(|_cc| {
+            Ok(Box::new(TaskScheduleApp {
+                task_segments,
+                max_tick,
+                task_ids,
+            }))
+        }),
+    )
+    .unwrap();
     Ok(())
 }
 
@@ -33,7 +52,7 @@ fn read_events(csv_path: &PathBuf) -> io::Result<Vec<GeneralEventData>> {
         .collect())
 }
 
-type TaskSegmentData = (HashMap<u32, Vec<(u32, u32)>>, u32, Vec<u32>);
+type TaskSegmentData = (HashMap<u32, (Vec<(u32, u32)>, String)>, u32, Vec<u32>);
 
 fn get_task_segments(data: &[GeneralEventData]) -> TaskSegmentData {
     let task_events: Vec<&GeneralEventData> = data
@@ -43,23 +62,24 @@ fn get_task_segments(data: &[GeneralEventData]) -> TaskSegmentData {
         })
         .collect();
 
-    let mut map: HashMap<u32, Vec<(u32, String)>> = HashMap::new();
+    let mut map: HashMap<u32, (Vec<(u32, String)>, String)> = HashMap::new();
 
     task_events.iter().for_each(|entry| {
-        map.entry(entry.taskid)
-            .or_default()
-            .push((entry.tick, entry.eventtype.to_owned()));
+        let (vect, my_name) = map.entry(entry.taskid).or_default();
+        vect.push((entry.tick, entry.eventtype.to_owned()));
+        my_name.clear();
+        my_name.push_str(&entry.task_name);
     });
 
     map.iter_mut()
-        .for_each(|vec| vec.1.sort_by_key(|&(t, _)| t));
+        .for_each(|(_, (vec, _))| vec.sort_by_key(|&(t, _)| t));
 
     let mut max_ticks: u32 = 0;
     let mut task_ids: Vec<u32> = vec![];
 
     let task_segments = map
         .iter()
-        .map(|(&task_id, vec)| {
+        .map(|(&task_id, (vec, name))| {
             task_ids.push(task_id);
 
             let mut in_ticks: Vec<u32> = vec![];
@@ -77,7 +97,7 @@ fn get_task_segments(data: &[GeneralEventData]) -> TaskSegmentData {
 
             while in_i < in_ticks.len() {
                 let start = in_ticks[in_i];
-                while out_i < out_ticks.len() && out_ticks[out_i] <= start {
+                while out_i < out_ticks.len() && out_ticks[out_i] < start {
                     out_i += 1;
                 }
                 if out_i < out_ticks.len() {
@@ -97,11 +117,11 @@ fn get_task_segments(data: &[GeneralEventData]) -> TaskSegmentData {
 
             if !segments.is_empty() {
                 max_ticks = max_ticks.max(segments.iter().map(|&(_, e)| e).max().unwrap_or(0));
-                (task_id, segments)
+                (task_id, (segments, name.to_string()))
             } else {
                 let last_tick = data.iter().map(|e| e.tick).max().unwrap_or(0);
                 max_ticks = max_ticks.max(last_tick);
-                (task_id, vec![])
+                (task_id, (vec![], name.to_string()))
             }
         })
         .collect();
@@ -142,9 +162,29 @@ fn calculate_x_ticks(max_tick: u32) -> Vec<f64> {
 }
 
 struct TaskScheduleApp {
-    task_segments: HashMap<u32, Vec<(u32, u32)>>,
+    task_segments: HashMap<u32, (Vec<(u32, u32)>, String)>,
     max_tick: u32,
     task_ids: Vec<u32>,
+}
+
+fn task_box<'t>(
+    name: impl Into<String>,
+    start: f64,
+    end: f64,
+    height: f64,
+    color: Color32,
+) -> Polygon<'t> {
+    Polygon::new(
+        name,
+        vec![
+            [start, height - 0.25],
+            [start, height + 0.25],
+            [end, height + 0.25],
+            [end, height - 0.25],
+        ],
+    )
+    .fill_color(color)
+    .stroke(Stroke::NONE)
 }
 
 impl eframe::App for TaskScheduleApp {
@@ -165,11 +205,9 @@ impl eframe::App for TaskScheduleApp {
                 .show_grid(true)
                 .x_axis_label("Tick Count")
                 .y_axis_label("Task ID")
-                .time_range(self.max_tick as f64)
-                .domain(0.0, self.max_tick as f64 * 1.02)
-                .label_formatter(|x, y, _| {
+                .label_formatter(|x, y| {
                     // Pretty y labels: task id numbers
-                    format!("{}{}", "", y as u32)
+                    format!("{}", x)
                 });
 
             // In egui_plot, there is no direct “BarSeries” that accepts horizontal bars,
@@ -177,32 +215,26 @@ impl eframe::App for TaskScheduleApp {
             // “y” axis is the *task index*.  We then set the `height` to the bar’s width.
             // The trick is to store points as `(start_tick, task_index, bar_width)`.
 
-            let mut bar_plots: Vec<BarPlot> = Vec::new();
+            let mut charts: Vec<Polygon> = Vec::new();
 
             for (idx, &task_id) in self.task_ids.iter().enumerate() {
                 // Y position: we’ll just use the integer index (0,1,2, …)
                 let y_pos = idx as f64 + 0.5; // +0.5 to center the bar
+                let color = color_for_task(idx as u32, self.task_ids.len());
 
-                let segments = self.task_segments.get(&task_id).unwrap();
-                for &(start, end) in segments {
-                    let width = (end - start) as f64;
-                    // Each bar is represented as a single point whose height is the width.
-                    let point = egui_plot::PlotPoint::new(start as f64, y_pos, width);
-                    let mut bar = BarPlot::new(&format!("t{}-{}", task_id, start))
-                        .points(vec![point])
-                        .color(color_for_task(idx as u32, self.task_ids.len()))
-                        .label(String::new()); // no label on each bar
-                    // The height is treated as the bar's *value* on the Y‑axis
-                    // – which is what `width` represents.
-                    bar_plots.push(bar);
-                }
+                let (segments, task_name) = self.task_segments.get(&task_id).unwrap();
+
+                let segments = segments.iter().map(|&(start, end)| {
+                    task_box(task_name, start as f64, end as f64, y_pos, color)
+                });
+
+                charts.append(&mut segments.collect());
             }
 
             // Now show the plot
             plot.show(ui, |plot_ui| {
                 // Add the horizontal grid lines
                 let ticks_x = calculate_x_ticks(self.max_tick);
-                plot_ui.set_x_ticks(&ticks_x);
 
                 // Add the Y‑tick labels – we need a custom handler because the
                 // default y‑labels are just numbers.  We’ll use a “PlotLine” with
@@ -210,14 +242,16 @@ impl eframe::App for TaskScheduleApp {
                 for (idx, &task_id) in self.task_ids.iter().enumerate() {
                     // Draw a horizontal invisible line so egui_plot shows a label
                     let y = idx as f64 + 0.5;
-                    let line = PlotLine::new(&format!("label_{}", task_id))
-                        .points(vec![
-                            egui_plot::PlotPoint::new(0.0, y, 0.0),
-                            egui_plot::PlotPoint::new(0.0, y, 0.0),
-                        ])
-                        .visible(false)
-                        .label(format!("{}", task_id));
+                    let line = Line::new(&format!("label_{}", task_id), vec![[0.0, y], [0.0, y]]);
                     plot_ui.line(line);
+                }
+
+                for chart in charts {
+                    plot_ui.polygon(chart);
+                }
+            });
+        });
+    }
 }
 
 fn color_for_task(task_index: u32, total: usize) -> Color32 {
