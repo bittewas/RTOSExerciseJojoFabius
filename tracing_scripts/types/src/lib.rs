@@ -125,6 +125,22 @@ pub struct GeneralEventData {
     pub task_name: String,
 }
 
+impl GeneralEventData {
+    pub fn is_queue_event(&self) -> bool {
+        matches!(
+            self.eventtype.as_str(),
+            "traceQUEUE_SEND"
+                | "traceQUEUE_SEND_FAILED"
+                | "traceQUEUE_SEND_FROM_ISR"
+                | "traceQUEUE_SEND_FROM_ISR_FAILED"
+                | "traceQUEUE_RECEIVE"
+                | "traceQUEUE_RECEIVE_FAILED"
+                | "traceQUEUE_RECEIVE_FROM_ISR"
+                | "traceQUEUE_RECEIVE_FROM_ISR_FAILED"
+        )
+    }
+}
+
 impl From<TickData> for GeneralEventData {
     fn from(value: TickData) -> Self {
         Self {

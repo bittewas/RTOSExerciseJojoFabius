@@ -1,15 +1,15 @@
 use std::{collections::HashMap, io, path::PathBuf};
 
 use clap::Parser;
-use egui::{Color32, Stroke};
-use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints, Points, Polygon};
-use palette::{rgb::Rgb, FromColor, IntoColor, RgbHue};
+use egui::{Align2, Color32, Stroke};
+use egui_plot::{LineStyle, Plot, PlotPoint, Points, Polygon, Text};
+use palette::{rgb::Rgb, FromColor};
 use types::GeneralEventData;
 
 #[derive(Parser, Debug)]
 #[command(name = "Viewer")]
 struct Args {
-    #[arg(short, long, value_name = "FILE")]
+    #[arg(short, long, value_name = "FILE", default_value = "./log_entries.csv")]
     input: PathBuf,
 }
 
@@ -17,7 +17,7 @@ fn main() -> io::Result<()> {
     let args = Args::parse();
     let events = read_events(&args.input)?;
 
-    let (task_segments, max_tick, task_ids) = get_task_segments(&events);
+    let (task_segments, task_ids, queue_ids) = get_task_segments(&events);
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -32,8 +32,8 @@ fn main() -> io::Result<()> {
         Box::new(|_cc| {
             Ok(Box::new(TaskScheduleApp {
                 task_segments,
-                max_tick,
                 task_ids,
+                queue_ids,
             }))
         }),
     )
@@ -52,119 +52,48 @@ fn read_events(csv_path: &PathBuf) -> io::Result<Vec<GeneralEventData>> {
         .collect())
 }
 
-type TaskSegmentData = (HashMap<u32, (Vec<(u32, u32)>, String)>, u32, Vec<u32>);
+type TaskSegmentData = (
+    HashMap<u32, Vec<GeneralEventData>>,
+    Vec<(u32, String)>,
+    Vec<u32>,
+);
 
 fn get_task_segments(data: &[GeneralEventData]) -> TaskSegmentData {
-    let task_events: Vec<&GeneralEventData> = data
-        .iter()
-        .filter(|ev| {
-            ev.eventtype == "traceTASK_SWITCHED_IN" || ev.eventtype == "traceTASK_SWITCHED_OUT"
-        })
-        .collect();
+    let mut queue_ids: Vec<u32> = vec![];
+    let task_events: Vec<&GeneralEventData> = data.iter().collect();
 
-    let mut map: HashMap<u32, (Vec<(u32, String)>, String)> = HashMap::new();
+    let mut map: HashMap<u32, Vec<GeneralEventData>> = HashMap::new();
 
-    task_events.iter().for_each(|entry| {
-        let (vect, my_name) = map.entry(entry.taskid).or_default();
-        vect.push((entry.tick, entry.eventtype.to_owned()));
-        my_name.clear();
-        my_name.push_str(&entry.task_name);
+    task_events.into_iter().for_each(|entry| {
+        let event_data = map.entry(entry.taskid).or_default();
+        event_data.push(entry.clone());
+        if entry.is_queue_event() && !queue_ids.contains(&entry.affected_object) {
+            queue_ids.push(entry.affected_object);
+        }
     });
 
     map.iter_mut()
-        .for_each(|(_, (vec, _))| vec.sort_by_key(|&(t, _)| t));
+        .for_each(|(_, vec)| vec.sort_by_key(|t| t.timestamp));
 
-    let mut max_ticks: u32 = 0;
-    let mut task_ids: Vec<u32> = vec![];
+    let mut task_ids: Vec<(u32, String)> = vec![];
 
-    let task_segments = map
-        .iter()
-        .map(|(&task_id, (vec, name))| {
-            task_ids.push(task_id);
+    map.iter().for_each(|(task_id, data)| {
+        task_ids.push((
+            *task_id,
+            data.first()
+                .map(|data| data.task_name.to_string())
+                .unwrap_or("".to_string()),
+        ));
+    });
 
-            let mut in_ticks: Vec<u32> = vec![];
-            let mut out_ticks: Vec<u32> = vec![];
-
-            vec.iter().for_each(|(tick, event)| match event.as_str() {
-                "traceTASK_SWITCHED_IN" => in_ticks.push(*tick),
-                "traceTASK_SWITCHED_OUT" => out_ticks.push(*tick),
-                _ => {}
-            });
-
-            let mut segments: Vec<(u32, u32)> = vec![];
-            let mut in_i = 0;
-            let mut out_i = 0;
-
-            while in_i < in_ticks.len() {
-                let start = in_ticks[in_i];
-                while out_i < out_ticks.len() && out_ticks[out_i] < start {
-                    out_i += 1;
-                }
-                if out_i < out_ticks.len() {
-                    let end = out_ticks[out_i];
-                    segments.push((start, end));
-                    in_i += 1;
-                    out_i += 1;
-                } else {
-                    // No matching OUT: use the latest tick from the whole file
-                    let last_known_tick = data.iter().map(|e| e.tick).max().unwrap_or(start);
-                    if last_known_tick > start {
-                        segments.push((start, last_known_tick));
-                    }
-                    break;
-                }
-            }
-
-            if !segments.is_empty() {
-                max_ticks = max_ticks.max(segments.iter().map(|&(_, e)| e).max().unwrap_or(0));
-                (task_id, (segments, name.to_string()))
-            } else {
-                let last_tick = data.iter().map(|e| e.tick).max().unwrap_or(0);
-                max_ticks = max_ticks.max(last_tick);
-                (task_id, (vec![], name.to_string()))
-            }
-        })
-        .collect();
-
-    task_ids.sort_unstable();
-    (task_segments, max_ticks, task_ids)
-}
-
-fn calculate_x_ticks(max_tick: u32) -> Vec<f64> {
-    if max_tick == 0 {
-        return (0..10).map(|x| x as f64).collect();
-    }
-    let mut tick_step = (max_tick as f64 / 15.0).round() as u32;
-    if tick_step == 0 {
-        tick_step = 1;
-    }
-    if tick_step > 1 {
-        let power_of_ten = 10u32.pow((tick_step as f64).log10().floor() as u32);
-        let relative_step = tick_step as f64 / power_of_ten as f64;
-        let nice_step = if relative_step < 1.5 {
-            1
-        } else if relative_step < 3.0 {
-            2
-        } else if relative_step < 7.0 {
-            5
-        } else {
-            10
-        };
-        tick_step = nice_step * power_of_ten;
-    }
-    let mut ticks: Vec<f64> = Vec::new();
-    let mut cur: f64 = 0.0;
-    while cur <= max_tick as f64 {
-        ticks.push(cur);
-        cur += tick_step as f64;
-    }
-    ticks
+    task_ids.sort_unstable_by_key(|(id, _)| *id);
+    (map, task_ids, queue_ids)
 }
 
 struct TaskScheduleApp {
-    task_segments: HashMap<u32, (Vec<(u32, u32)>, String)>,
-    max_tick: u32,
-    task_ids: Vec<u32>,
+    task_segments: HashMap<u32, Vec<GeneralEventData>>,
+    task_ids: Vec<(u32, String)>,
+    queue_ids: Vec<u32>,
 }
 
 fn task_box<'t>(
@@ -174,29 +103,32 @@ fn task_box<'t>(
     height: f64,
     color: Color32,
 ) -> Polygon<'t> {
+    let name = name.into();
     Polygon::new(
-        name,
+        name.clone(),
         vec![
             [start, height - 0.25],
             [start, height + 0.25],
             [end, height + 0.25],
             [end, height - 0.25],
+            [start, height - 0.25],
         ],
     )
     .fill_color(color)
-    .stroke(Stroke::NONE)
+    .stroke(Stroke::new(1.0, color))
+    .style(LineStyle::Solid)
+    .allow_hover(false)
+    .name(name)
+    .highlight(false)
 }
 
 impl eframe::App for TaskScheduleApp {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Title
             ui.heading("Task Schedule Diagram");
 
-            // A tiny bit of padding
             ui.add_space(8.0);
 
-            // Build the Plot
             let plot = Plot::new("schedule_plot")
                 .view_aspect(1.5) // width / height ratio
                 .allow_zoom(true)
@@ -205,49 +137,175 @@ impl eframe::App for TaskScheduleApp {
                 .show_grid(true)
                 .x_axis_label("Tick Count")
                 .y_axis_label("Task ID")
-                .label_formatter(|x, y| {
-                    // Pretty y labels: task id numbers
-                    format!("{}", x)
-                });
+                .label_formatter(|x, y| format!("({0:.2}, {1:.2}) {2}", y.x, y.y, x));
 
-            // In egui_plot, there is no direct “BarSeries” that accepts horizontal bars,
-            // but we can create a `BarPlot` where the “x” axis is the start tick and the
-            // “y” axis is the *task index*.  We then set the `height` to the bar’s width.
-            // The trick is to store points as `(start_tick, task_index, bar_width)`.
-
-            let mut charts: Vec<Polygon> = Vec::new();
-
-            for (idx, &task_id) in self.task_ids.iter().enumerate() {
-                // Y position: we’ll just use the integer index (0,1,2, …)
-                let y_pos = idx as f64 + 0.5; // +0.5 to center the bar
-                let color = color_for_task(idx as u32, self.task_ids.len());
-
-                let (segments, task_name) = self.task_segments.get(&task_id).unwrap();
-
-                let segments = segments.iter().map(|&(start, end)| {
-                    task_box(task_name, start as f64, end as f64, y_pos, color)
-                });
-
-                charts.append(&mut segments.collect());
-            }
-
-            // Now show the plot
             plot.show(ui, |plot_ui| {
-                // Add the horizontal grid lines
-                let ticks_x = calculate_x_ticks(self.max_tick);
+                for (idx, (task_id, name)) in self.task_ids.iter().enumerate() {
+                    let y_pos = idx as f64 + 0.5;
+                    let color = color_for_task(idx as u32, self.task_ids.len());
 
-                // Add the Y‑tick labels – we need a custom handler because the
-                // default y‑labels are just numbers.  We’ll use a “PlotLine” with
-                // `visible=false` to inject the labels.
-                for (idx, &task_id) in self.task_ids.iter().enumerate() {
-                    // Draw a horizontal invisible line so egui_plot shows a label
-                    let y = idx as f64 + 0.5;
-                    let line = Line::new(&format!("label_{}", task_id), vec![[0.0, y], [0.0, y]]);
-                    plot_ui.line(line);
-                }
+                    let mut data = self.task_segments.get(task_id).unwrap().clone();
+                    data.sort_by_key(|data| data.tick);
 
-                for chart in charts {
-                    plot_ui.polygon(chart);
+                    let mut last_in_data = None;
+
+                    data.iter()
+                        .for_each(|event_data| match event_data.eventtype.as_str() {
+                            "traceTASK_SWITCHED_IN" => {
+                                last_in_data = Some((event_data.timestamp, event_data.tick));
+                            }
+                            "traceTASK_SWITCHED_OUT" => {
+                                if let Some((_, tick)) = last_in_data {
+                                    plot_ui.add(task_box(
+                                        "",
+                                        tick as f64,
+                                        event_data.tick as f64,
+                                        y_pos,
+                                        color,
+                                    ));
+                                    last_in_data = None
+                                }
+                            }
+                            _ => {}
+                        });
+
+                    if let Some((_, tick)) = last_in_data {
+                        plot_ui.add(task_box(
+                            "",
+                            tick as f64,
+                            data.iter().map(|t| t.tick).max().unwrap_or(tick) as f64,
+                            y_pos,
+                            color,
+                        ));
+                    }
+
+                    data.iter()
+                        .for_each(|event_data| match event_data.eventtype.as_str() {
+                            "traceTASK_DELAY_UNTIL" => {
+                                plot_ui.points(
+                                    Points::new(
+                                        "DELAY UNTIL",
+                                        vec![[event_data.delay as f64, y_pos - 0.25]],
+                                    )
+                                    .filled(true)
+                                    .radius(4.0)
+                                    .shape(egui_plot::MarkerShape::Up)
+                                    .color(Color32::WHITE),
+                                );
+                            }
+                            "traceTASK_DELAY" => {
+                                plot_ui.points(
+                                    Points::new(
+                                        "DELAY",
+                                        vec![[event_data.delay as f64, y_pos - 0.25]],
+                                    )
+                                    .filled(true)
+                                    .radius(4.0)
+                                    .shape(egui_plot::MarkerShape::Up)
+                                    .color(Color32::PURPLE),
+                                );
+                            }
+                            "traceQUEUE_RECEIVE" => {
+                                plot_ui.points(
+                                    Points::new(
+                                        "QUEUE RECEIVE",
+                                        vec![[event_data.tick as f64, y_pos - 0.125]],
+                                    )
+                                    .filled(true)
+                                    .radius(4.0)
+                                    .shape(egui_plot::MarkerShape::Circle)
+                                    .color(color_for_task(
+                                        self.queue_ids
+                                            .iter()
+                                            .position(|&o| o == event_data.affected_object)
+                                            .unwrap()
+                                            as u32,
+                                        self.queue_ids.len(),
+                                    )),
+                                );
+                            }
+                            "traceQUEUE_SEND" => {
+                                plot_ui.points(
+                                    Points::new(
+                                        "QUEUE SEND",
+                                        vec![[event_data.tick as f64, y_pos + 0.125]],
+                                    )
+                                    .filled(true)
+                                    .radius(4.0)
+                                    .shape(egui_plot::MarkerShape::Diamond)
+                                    .color(color_for_task(
+                                        self.queue_ids
+                                            .iter()
+                                            .position(|&o| o == event_data.affected_object)
+                                            .unwrap()
+                                            as u32,
+                                        self.queue_ids.len(),
+                                    )),
+                                );
+                            }
+                            "traceTASK_CREATE" => {
+                                plot_ui.points(
+                                    Points::new(
+                                        format!("Created Task {}", event_data.affected_object),
+                                        vec![[event_data.tick as f64, y_pos]],
+                                    )
+                                    .filled(true)
+                                    .radius(4.0)
+                                    .shape(egui_plot::MarkerShape::Plus)
+                                    .color(Color32::GREEN),
+                                );
+                                if let Some(pos) = self
+                                    .task_ids
+                                    .iter()
+                                    .position(|(task, _)| *task == event_data.affected_object)
+                                {
+                                    plot_ui.points(
+                                        Points::new(
+                                            format!("Task created by {}", event_data.task_name),
+                                            [event_data.tick as f64, pos as f64 + 0.5],
+                                        )
+                                        .filled(true)
+                                        .radius(4.0)
+                                        .shape(egui_plot::MarkerShape::Plus)
+                                        .color(Color32::PURPLE),
+                                    );
+                                }
+                            }
+                            "traceTASK_DELETE" => {
+                                plot_ui.points(
+                                    Points::new(
+                                        format!("Delete Task {}", event_data.affected_object),
+                                        vec![[event_data.tick as f64, y_pos]],
+                                    )
+                                    .filled(true)
+                                    .radius(4.0)
+                                    .shape(egui_plot::MarkerShape::Cross)
+                                    .color(Color32::GREEN),
+                                );
+                                if let Some(pos) = self
+                                    .task_ids
+                                    .iter()
+                                    .position(|(task, _)| *task == event_data.affected_object)
+                                {
+                                    plot_ui.points(
+                                        Points::new(
+                                            format!("Task deleted by {}", event_data.task_name),
+                                            [event_data.tick as f64, pos as f64 + 0.5],
+                                        )
+                                        .filled(true)
+                                        .radius(4.0)
+                                        .shape(egui_plot::MarkerShape::Cross)
+                                        .color(Color32::PURPLE),
+                                    );
+                                }
+                            }
+                            _ => {}
+                        });
+
+                    plot_ui.text(
+                        Text::new(name, PlotPoint::new(-10.0, y_pos), name.to_string())
+                            .anchor(Align2::RIGHT_CENTER),
+                    );
                 }
             });
         });
