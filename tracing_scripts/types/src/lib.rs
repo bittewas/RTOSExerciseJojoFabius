@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub mod parse;
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum TaskEventType {
     #[serde(rename = "traceTASK_CREATE")]

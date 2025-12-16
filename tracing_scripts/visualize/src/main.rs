@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, path::PathBuf};
+use std::{collections::HashMap, io, path::PathBuf, str::FromStr};
 
 use clap::Parser;
 use egui::{Align2, Color32, Stroke};
@@ -17,7 +17,7 @@ fn main() -> io::Result<()> {
     let args = Args::parse();
     let events = read_events(&args.input)?;
 
-    let (task_segments, task_ids, queue_ids) = get_task_segments(&events);
+    let task_segment_data = get_task_segments(&events);
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -31,9 +31,8 @@ fn main() -> io::Result<()> {
         options,
         Box::new(|_cc| {
             Ok(Box::new(TaskScheduleApp {
-                task_segments,
-                task_ids,
-                queue_ids,
+                task_segment_data,
+                input_file: args.input.to_str().unwrap().to_string(),
             }))
         }),
     )
@@ -91,9 +90,8 @@ fn get_task_segments(data: &[GeneralEventData]) -> TaskSegmentData {
 }
 
 struct TaskScheduleApp {
-    task_segments: HashMap<u32, Vec<GeneralEventData>>,
-    task_ids: Vec<(u32, String)>,
-    queue_ids: Vec<u32>,
+    task_segment_data: TaskSegmentData,
+    input_file: String,
 }
 
 fn task_box<'t>(
@@ -140,11 +138,13 @@ impl eframe::App for TaskScheduleApp {
                 .label_formatter(|x, y| format!("({0:.2}, {1:.2}) {2}", y.x, y.y, x));
 
             plot.show(ui, |plot_ui| {
-                for (idx, (task_id, name)) in self.task_ids.iter().enumerate() {
+                let task_ids = &self.task_segment_data.1;
+                let queue_ids = &self.task_segment_data.2;
+                for (idx, (task_id, name)) in task_ids.iter().enumerate() {
                     let y_pos = idx as f64 + 0.5;
-                    let color = color_for_task(idx as u32, self.task_ids.len());
+                    let color = color_for_task(idx as u32, task_ids.len());
 
-                    let mut data = self.task_segments.get(task_id).unwrap().clone();
+                    let mut data = self.task_segment_data.0.get(task_id).unwrap().clone();
                     data.sort_by_key(|data| data.tick);
 
                     let mut last_in_data = None;
@@ -215,12 +215,12 @@ impl eframe::App for TaskScheduleApp {
                                     .radius(4.0)
                                     .shape(egui_plot::MarkerShape::Circle)
                                     .color(color_for_task(
-                                        self.queue_ids
+                                        queue_ids
                                             .iter()
                                             .position(|&o| o == event_data.affected_object)
                                             .unwrap()
                                             as u32,
-                                        self.queue_ids.len(),
+                                        queue_ids.len(),
                                     )),
                                 );
                             }
@@ -234,12 +234,12 @@ impl eframe::App for TaskScheduleApp {
                                     .radius(4.0)
                                     .shape(egui_plot::MarkerShape::Diamond)
                                     .color(color_for_task(
-                                        self.queue_ids
+                                        queue_ids
                                             .iter()
                                             .position(|&o| o == event_data.affected_object)
                                             .unwrap()
                                             as u32,
-                                        self.queue_ids.len(),
+                                        queue_ids.len(),
                                     )),
                                 );
                             }
@@ -254,8 +254,7 @@ impl eframe::App for TaskScheduleApp {
                                     .shape(egui_plot::MarkerShape::Plus)
                                     .color(Color32::GREEN),
                                 );
-                                if let Some(pos) = self
-                                    .task_ids
+                                if let Some(pos) = task_ids
                                     .iter()
                                     .position(|(task, _)| *task == event_data.affected_object)
                                 {
@@ -282,8 +281,7 @@ impl eframe::App for TaskScheduleApp {
                                     .shape(egui_plot::MarkerShape::Cross)
                                     .color(Color32::GREEN),
                                 );
-                                if let Some(pos) = self
-                                    .task_ids
+                                if let Some(pos) = task_ids
                                     .iter()
                                     .position(|(task, _)| *task == event_data.affected_object)
                                 {
@@ -308,12 +306,16 @@ impl eframe::App for TaskScheduleApp {
                     );
                 }
             });
+            if ui.button("Reload from file").clicked() {
+                let events = read_events(&PathBuf::from_str(&self.input_file).unwrap()).unwrap();
+
+                self.task_segment_data = get_task_segments(&events);
+            }
         });
     }
 }
 
 fn color_for_task(task_index: u32, total: usize) -> Color32 {
-    // A simple hue rotation: hue ∈ [0, 360)
     let hue = (task_index as f32 / total as f32) * 360.0;
     let hsl = palette::Hsl::new(palette::RgbHue::from_degrees(hue), 0.5, 0.6);
     let rgb: Rgb = Rgb::from_color(hsl);
