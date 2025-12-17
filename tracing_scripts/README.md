@@ -52,4 +52,6 @@ As some of our tasks had execution times smaller than a tick before being switch
 
 ## Visualisation tracing script (Rust self build one)
 
-TODO!
+This is our self build visualization for later debugging by us.
+
+This alternative tracing script is build in rust to better integrate with our export workflow. You can run it using `cargo run --bin visualize`
