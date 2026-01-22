@@ -1287,6 +1287,9 @@ typedef struct xSTATIC_TCB
     #endif
     StaticListItem_t xDummy3[ 2 ];
     UBaseType_t uxDummy5;
+    UBaseType_t uxDummy51;
+    UBaseType_t uxDummy52;
+    UBaseType_t uxDummy53;
     void * pxDummy6;
     uint8_t ucDummy7[ configMAX_TASK_NAME_LEN ];
     #if ( configNUMBER_OF_CORES > 1 )

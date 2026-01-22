@@ -14,6 +14,9 @@
 #include "Wire.h"
 #include "esp_cpu.h"
 #include "esp_private/systimer.h"
+#include "hal/gpio_types.h"
+#include "soc/gpio_num.h"
+#include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <stdio.h>
@@ -45,8 +48,7 @@ const unsigned int TASK_MESSAGE_BUFFER_SIZE = 200;
 
 unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
 unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE = sizeof(QueueTraceData_Fix);
-char *GLOBAL_QUEUE_MESSAGE_BUFFER =
-    (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(QueueTraceData_Fix));
+char *GLOBAL_QUEUE_MESSAGE_BUFFER = (char *)malloc(QUEUE_MESSAGE_BUFFER_SIZE * sizeof(QueueTraceData_Fix));
 
 typedef struct __attribute__((__packed__)) TickTraceData {
   TickType_t c_time;
@@ -205,6 +207,87 @@ void buttonWatch(void *pvParameters) {
     }
   }
 }
+
+SemaphoreHandle_t xSemaphoreTopLeftPressed = xSemaphoreCreateBinary();
+
+static void topLeftBottonPressInterruptHandle(void *args) {
+  static portBASE_TYPE xHigherPrioTaskWoken;
+
+  xHigherPrioTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR(xSemaphoreTopLeftPressed, &xHigherPrioTaskWoken);
+  if (xHigherPrioTaskWoken == pdTRUE) {
+    portYIELD_FROM_ISR(xHigherPrioTaskWoken);
+  }
+}
+
+void topLeftBottonPressTask(void *pvParameters) {
+  while (true) {
+    xSemaphoreTake(xSemaphoreTopLeftPressed, portMAX_DELAY);
+
+    ESP_LOGI("topLeft", "Top left pressed");
+  }
+}
+
+SemaphoreHandle_t xSemaphoreTopRightPressed = xSemaphoreCreateBinary();
+
+static void topRightBottonPressInterruptHandle(void *args) {
+  static portBASE_TYPE xHigherPrioTaskWoken;
+
+  xHigherPrioTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR(xSemaphoreTopRightPressed, &xHigherPrioTaskWoken);
+  if (xHigherPrioTaskWoken == pdTRUE) {
+    portYIELD_FROM_ISR(xHigherPrioTaskWoken);
+  }
+}
+
+void topRightBottonPressTask(void *pvParameters) {
+  while (true) {
+    xSemaphoreTake(xSemaphoreTopRightPressed, portMAX_DELAY);
+
+    ESP_LOGI("topRight", "Top right pressed");
+  }
+}
+
+SemaphoreHandle_t xSemaphoreBottomLeftPressed = xSemaphoreCreateBinary();
+
+static void bottomLeftBottonPressInterruptHandle(void *args) {
+  static portBASE_TYPE xHigherPrioTaskWoken;
+
+  xHigherPrioTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR(xSemaphoreBottomLeftPressed, &xHigherPrioTaskWoken);
+  if (xHigherPrioTaskWoken == pdTRUE) {
+    portYIELD_FROM_ISR(xHigherPrioTaskWoken);
+  }
+}
+
+void bottomLeftBottonPressTask(void *pvParameters) {
+  while (true) {
+    xSemaphoreTake(xSemaphoreBottomLeftPressed, portMAX_DELAY);
+
+    ESP_LOGI("bottomLeft", "Bottom left pressed");
+  }
+}
+
+SemaphoreHandle_t xSemaphoreBottomRightPressed = xSemaphoreCreateBinary();
+
+static void bottomRightBottonPressInterruptHandle(void *args) {
+  static portBASE_TYPE xHigherPrioTaskWoken;
+
+  xHigherPrioTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR(xSemaphoreBottomRightPressed, &xHigherPrioTaskWoken);
+  if (xHigherPrioTaskWoken == pdTRUE) {
+    portYIELD_FROM_ISR(xHigherPrioTaskWoken);
+  }
+}
+
+void bottomRightBottonPressTask(void *pvParameters) {
+  while (true) {
+    xSemaphoreTake(xSemaphoreBottomRightPressed, portMAX_DELAY);
+
+    ESP_LOGI("bottomRight", "Bottom right pressed");
+  }
+}
+
 void clockCounter(void *pvParameters) {
   const TickType_t xFrequency = 1000;
   TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -347,6 +430,22 @@ void debugPrintTask(void *pvParameters) {
 }
 
 extern "C" void app_main() {
+  gpio_install_isr_service(0);
+
+  gpio_set_intr_type((gpio_num_t)TOP_LEFT, GPIO_INTR_NEGEDGE);
+  gpio_set_intr_type((gpio_num_t)TOP_RIGHT, GPIO_INTR_NEGEDGE);
+  gpio_set_intr_type((gpio_num_t)BOTTOM_LEFT, GPIO_INTR_NEGEDGE);
+  gpio_set_intr_type((gpio_num_t)BOTTOM_RIGHT, GPIO_INTR_NEGEDGE);
+
+  gpio_isr_handler_add((gpio_num_t)TOP_LEFT, &topLeftBottonPressInterruptHandle,
+                       NULL);
+  gpio_isr_handler_add((gpio_num_t)TOP_RIGHT,
+                       &topRightBottonPressInterruptHandle, NULL);
+  gpio_isr_handler_add((gpio_num_t)BOTTOM_LEFT,
+                       &bottomLeftBottonPressInterruptHandle, NULL);
+  gpio_isr_handler_add((gpio_num_t)BOTTOM_RIGHT,
+                       &bottomRightBottonPressInterruptHandle, NULL);
+
   while (GLOBAL_TASK_MESSAGE_BUFFER == 0) {
     GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
     GLOBAL_TASK_MESSAGE_BUFFER =
@@ -379,6 +478,8 @@ extern "C" void app_main() {
 
   xTaskCreate(debugPrintTask, "debugTask", 4096, NULL, configMAX_PRIORITIES - 1,
               &MONITOR_TASK);
+  (*MONITOR_TASK).uxPeriod = 1000;
+
   /* Only priorities from 1-25 (configMAX_PRIORITIES) possible. */
   /* Initialize the display first. */
   xTaskCreate(initDisplay, "initDisplay", 4096, NULL, configMAX_PRIORITIES - 1,
@@ -410,6 +511,15 @@ extern "C" void app_main() {
 
   // xTaskCreate(buttonWatch, "watch", 8192, NULL, 1, NULL);
   // xTaskCreate(clockCounter, "clock", 16384, NULL, 1, NULL);
+
+  xTaskCreate(topLeftBottonPressTask, "initDisplay", 4096, NULL,
+              configMAX_PRIORITIES - 2, NULL);
+  xTaskCreate(topRightBottonPressTask, "initDisplay", 4096, NULL,
+              configMAX_PRIORITIES - 2, NULL);
+  xTaskCreate(bottomLeftBottonPressTask, "initDisplay", 4096, NULL,
+              configMAX_PRIORITIES - 2, NULL);
+  xTaskCreate(bottomRightBottonPressTask, "initDisplay", 4096, NULL,
+              configMAX_PRIORITIES - 2, NULL);
 
   ESP_LOGI("app_main", "Starting scheduler from app_main()");
   vTaskStartScheduler();

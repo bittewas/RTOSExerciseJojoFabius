@@ -1733,6 +1733,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                             const configSTACK_DEPTH_TYPE uxStackDepth,
                             void * const pvParameters,
                             UBaseType_t uxPriority,
+                            UBaseType_t uxPeriod,
+                            UBaseType_t uxWCET,
+                            UBaseType_t uxRelativeDeadline,
                             TaskHandle_t * const pxCreatedTask )
     {
         TCB_t * pxNewTCB;
