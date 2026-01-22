@@ -16,6 +16,7 @@
 #include "esp_private/systimer.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <pip.h>
 #include <stdio.h>
 #include <stdlib.h>
 
