@@ -27,9 +27,7 @@ PipMutexHolderHandle_t xCreateNewPipMutex() {
 void pip_take_semaphore(PipMutexHolderHandle_t mutex, TickType_t xTicksToWait) {
   UBaseType_t currentTaskPriority = uxTaskPriorityGet(nullptr);
   xSemaphoreTake(mutex->semaphore, xTicksToWait);
-  if (xTicksToWait != portMAX_DELAY &&
-      xSemaphoreGetMutexHolder(mutex->semaphore) !=
-          xTaskGetCurrentTaskHandle()) {
+  if (xTicksToWait != portMAX_DELAY) {
   }
 }
 

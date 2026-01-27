@@ -40,9 +40,9 @@ typedef volatile struct __attribute__((__packed__)) QueueTraceData {
   TaskHandle_t taskIdentifier;
 } QueueTraceData_Fix;
 
-const unsigned int QUEUE_MESSAGE_BUFFER_SIZE = 200;
+const unsigned int QUEUE_MESSAGE_BUFFER_SIZE = 800;
 const unsigned int TICK_MESSAGE_BUFFER_SIZE = 1010;
-const unsigned int TASK_MESSAGE_BUFFER_SIZE = 200;
+const unsigned int TASK_MESSAGE_BUFFER_SIZE = 300;
 
 unsigned int GLOBAL_QUEUE_MESSAGE_INDEX;
 unsigned int GLOBAL_QUEUE_MESSAGE_ELEMENT_SIZE = sizeof(QueueTraceData_Fix);
@@ -279,7 +279,7 @@ void printingTask(void *pvParameters) {
   }
 }
 
-const BaseType_t TASK_COUNT = 4;
+const BaseType_t TASK_COUNT = 3;
 TaskHandle_t *taskList = new TaskHandle_t[TASK_COUNT];
 
 void debugPrintTask(void *pvParameters) {
@@ -347,6 +347,105 @@ void debugPrintTask(void *pvParameters) {
   }
 }
 
+SemaphoreHandle_t high_low_semaphore = xSemaphoreCreateBinary();
+
+BaseType_t xy = 1;
+
+void high_prio_task(void *pvParameters) {
+  vTaskDelay(100);
+  const TickType_t xFrequency = 100;
+  vTaskDelay(3);
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  while (true) {
+    BaseType_t x = 1;
+    for (BaseType_t t = 0; t < 50; t++) {
+      x *= 2;
+      if (x == 0) {
+        ESP_LOGI("Lalalala", "Ich kann schreiben! %d", x);
+        x = 1;
+      }
+    }
+
+    xSemaphoreTake(high_low_semaphore, portMAX_DELAY);
+
+    if (xy == x) {
+      ESP_LOGI("DEBUG", "THEY MATCH");
+    }
+
+    xSemaphoreGive(high_low_semaphore);
+
+    for (BaseType_t t = 0; t < 50; t++) {
+      x *= 2;
+      if (x == 0) {
+        ESP_LOGI("Lalalala", "Ich kann schreiben! %d", x);
+        x = 1;
+      }
+    }
+
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+  }
+}
+
+void medium_prio_task(void *pvParameters) {
+  vTaskDelay(100);
+  const TickType_t xFrequency = 100;
+  vTaskDelay(3);
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  while (true) {
+    BaseType_t x = 1;
+    for (BaseType_t t = 0; t < 200; t++) {
+      x *= 2;
+      if (x == 0) {
+        ESP_LOGI("Lalalala", "Ich kann schreiben! %d", x);
+        x = 1;
+      }
+    }
+
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+  }
+}
+
+void low_prio_task(void *pvParameters) {
+  vTaskDelay(100);
+  const TickType_t xFrequency = 100;
+  xSemaphoreGive(high_low_semaphore);
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  while (true) {
+    xSemaphoreTake(high_low_semaphore, portMAX_DELAY);
+
+    xy = 1;
+
+    for (BaseType_t t = 0; t < 100; t++) {
+      xy *= 2;
+      if (xy == 0) {
+        ESP_LOGI("Lalalala", "Ich kann schreiben! %d", xy);
+        xy = 1;
+      }
+    }
+
+    ESP_LOGI("User should check", "%d : %d", xy, xy);
+    BaseType_t y = xy;
+
+    xSemaphoreGive(high_low_semaphore);
+
+    BaseType_t x = 1;
+
+    for (BaseType_t i = 0; i < 200; i++) {
+      x *= 2;
+      if (x == 0) {
+        ESP_LOGI("Lalalala", "Ich kann schreiben! %d", x);
+        x = 1;
+      }
+    }
+
+    ESP_LOGI("User should check", "%d : %d", x, y);
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+  }
+}
+
 extern "C" void app_main() {
   while (GLOBAL_TASK_MESSAGE_BUFFER == 0) {
     GLOBAL_TASK_MESSAGE_ELEMENT_SIZE = sizeof(TaskTraceData_Fix);
@@ -385,6 +484,7 @@ extern "C" void app_main() {
   xTaskCreate(initDisplay, "initDisplay", 4096, NULL, configMAX_PRIORITIES - 1,
               NULL);
 
+  /*
   ProducerParameters *producer1Params =
       (ProducerParameters *)malloc(sizeof(ProducerParameters));
   producer1Params->xFrequency = pdMS_TO_TICKS(100);
@@ -406,8 +506,13 @@ extern "C" void app_main() {
   xTaskCreate(producerTasks, "producerTask2", 4096, (void *)producer2Params, 1,
               (&taskList[1]));
   xTaskCreate(producerTasks, "producerTask3", 4096, (void *)producer3Params, 1,
-              (&taskList[2]));
-  xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 1, (&taskList[3]));
+              (&taskList[2]));*/
+  xTaskCreate(high_prio_task, "High prio task", 4096, null, 3, (&taskList[0]));
+  xTaskCreate(medium_prio_task, "Medium prio task", 4096, null, 2,
+              (&taskList[1]));
+  xTaskCreate(low_prio_task, "Low prio task", 4096, null, 1, (&taskList[2]));
+  // xTaskCreate(printingTask, "printer", 4096, &xQueueHandle, 2,
+  // (&taskList[3]));
 
   // xTaskCreate(buttonWatch, "watch", 8192, NULL, 1, NULL);
   // xTaskCreate(clockCounter, "clock", 16384, NULL, 1, NULL);
